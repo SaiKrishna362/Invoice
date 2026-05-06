@@ -1,0 +1,125 @@
+// ============================================
+// prisma/schema.prisma
+// Defines your database tables
+// After editing, run: npm run db:push
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// USER — stores freelancer accounts
+// ============================================
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String                        // Always stored as a hash, never plain text
+  gstin     String?                       // GST number (optional)
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clients   Client[]
+  invoices  Invoice[]
+}
+
+// ============================================
+// CLIENT — stores your customers
+// ============================================
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  address   String?
+  gstin     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Links client to the user who created them
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  invoices  Invoice[]
+}
+
+// ============================================
+// INVOICE — the main invoice record
+// ============================================
+model Invoice {
+  id         String        @id @default(cuid())
+  invoiceNo  String        @unique           // e.g. INV-001
+  status     InvoiceStatus @default(DRAFT)
+  dueDate    DateTime
+  notes      String?
+  gstPercent Float         @default(18)
+  subtotal   Float                           // Total before GST
+  gstAmount  Float                           // GST portion
+  total      Float                           // Final amount (subtotal + GST)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  userId     String
+  user       User          @relation(fields: [userId], references: [id])
+
+  clientId   String
+  client     Client        @relation(fields: [clientId], references: [id])
+
+  items      InvoiceItem[]
+}
+
+// ============================================
+// INVOICE ITEM — line items on an invoice
+// e.g. "Logo Design — 5 hrs @ ₹1000/hr"
+// ============================================
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  description String
+  quantity    Float
+  rate        Float
+  amount      Float   // quantity × rate (pre-calculated)
+
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id])
+}
+
+// ============================================
+// PASSWORD RESET TOKEN — one-time reset links
+// ============================================
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+
+  @@index([email])
+}
+
+// ============================================
+// PHONE OTP — SMS verification codes
+// ============================================
+model PhoneOtp {
+  id        String   @id @default(cuid())
+  phone     String
+  token     String   @unique
+  expiresAt DateTime
+
+  @@index([phone])
+}
+
+// ============================================
+// ENUM — possible invoice statuses
+// ============================================
+enum InvoiceStatus {
+  DRAFT    // Created, not sent yet
+  SENT     // Emailed to client
+  PAID     // Client paid
+  OVERDUE  // Past due date, unpaid
+}

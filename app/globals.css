@@ -1,0 +1,38 @@
+/* ============================================
+   app/globals.css — Global Styles
+   ⚠️  REPLACE your existing globals.css with this
+
+   Tailwind directives load the utility classes.
+   Custom variables provide consistent theming.
+   ============================================ */
+
+@import "tailwindcss";
+
+/* ---- DESIGN TOKENS ---- */
+/* Use these CSS variables anywhere for consistency */
+:root {
+  --color-green:       #1a6b4a;   /* Primary brand green */
+  --color-green-mid:   #2d9b6f;   /* Lighter green for hover states */
+  --color-green-light: #e8f5ee;   /* Very light green for backgrounds */
+  --color-ink:         #1a1a1a;   /* Near-black for body text */
+  --color-muted:       #6b6b6b;   /* Gray for secondary text */
+  --color-border:      #e0ddd6;   /* Warm gray for borders */
+  --color-bg:          #f5f4f0;   /* Off-white page background */
+}
+
+/* ---- BASE STYLES ---- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased; /* Smoother text on Mac */
+}
+
+/* ---- CUSTOM SCROLLBAR ---- */
+/* Makes the scrollbar thinner and cleaner */
+::-webkit-scrollbar       { width: 5px; }
+::-webkit-scrollbar-track { background: #f1f1f1; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }

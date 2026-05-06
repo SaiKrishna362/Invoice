@@ -1,0 +1,153 @@
+import { auth } from "@/auth";
+import { db } from "@/lib/db";
+import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils";
+import Link from "next/link";
+
+const STATUSES = ["ALL", "DRAFT", "SENT", "PAID", "OVERDUE"] as const;
+
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const session = await auth();
+  const userId = session!.user!.id;
+  const { status } = await searchParams;
+
+  const activeFilter = STATUSES.includes(status as typeof STATUSES[number])
+    ? (status as typeof STATUSES[number])
+    : "ALL";
+
+  const invoices = await db.invoice.findMany({
+    where: {
+      userId,
+      ...(activeFilter !== "ALL" ? { status: activeFilter } : {}),
+    },
+    include: { client: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return (
+    <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-[#1a1a1a]">Invoices</h1>
+          <p className="text-sm text-[#6b6b6b] mt-1">
+            {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <Link
+          href="/invoices/new"
+          className="bg-[#1a6b4a] text-white text-sm font-medium px-4 py-2.5 rounded-lg
+                     hover:bg-[#2d9b6f] transition-colors whitespace-nowrap"
+        >
+          + New
+        </Link>
+      </div>
+
+      {/* Status filter tabs — horizontal scroll on mobile */}
+      <div className="overflow-x-auto mb-5 -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex gap-1 bg-white border border-[#e0ddd6] rounded-xl p-1 w-max">
+          {STATUSES.map((s) => (
+            <Link
+              key={s}
+              href={s === "ALL" ? "/invoices" : `/invoices?status=${s}`}
+              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap
+                ${activeFilter === s
+                  ? "bg-[#1a6b4a] text-white"
+                  : "text-[#6b6b6b] hover:text-[#1a1a1a] hover:bg-[#f5f4f0]"
+                }`}
+            >
+              {s === "ALL" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Invoice list */}
+      {invoices.length === 0 ? (
+        <div className="bg-white border border-[#e0ddd6] rounded-xl text-center py-20 px-6">
+          <p className="text-[#6b6b6b] text-sm mb-1">No invoices found</p>
+          <p className="text-[#aaa] text-xs mb-5">
+            {activeFilter === "ALL"
+              ? "Create your first invoice to get started"
+              : `No ${activeFilter.toLowerCase()} invoices`}
+          </p>
+          {activeFilter === "ALL" && (
+            <Link
+              href="/invoices/new"
+              className="inline-block bg-[#1a6b4a] text-white text-sm px-5 py-2.5 rounded-lg
+                         hover:bg-[#2d9b6f] transition-colors"
+            >
+              Create Invoice
+            </Link>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white border border-[#e0ddd6] rounded-xl overflow-hidden">
+
+          {/* Desktop table header */}
+          <div className="hidden sm:grid grid-cols-[1fr_1fr_110px_110px_90px_48px] gap-4 px-6 py-3
+                          border-b border-[#e0ddd6] bg-[#f9f8f6]">
+            <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">Invoice</span>
+            <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">Client</span>
+            <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">Due</span>
+            <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide text-right">Amount</span>
+            <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">Status</span>
+            <span />
+          </div>
+
+          {invoices.map((inv) => (
+            <div
+              key={inv.id}
+              className="border-b border-[#e0ddd6] last:border-0 hover:bg-[#f9f8f6] transition-colors"
+            >
+              {/* Mobile layout */}
+              <div className="sm:hidden flex items-start gap-3 px-4 py-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[#1a1a1a]">{inv.invoiceNo}</p>
+                  <p className="text-xs text-[#6b6b6b] mt-0.5 truncate">{inv.client.name}</p>
+                  <p className="text-xs text-[#aaa] mt-0.5">Due {formatDate(inv.dueDate)}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold text-[#1a1a1a]">{formatCurrency(inv.total)}</p>
+                  <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(inv.status)}`}>
+                    {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
+                  </span>
+                </div>
+                <Link
+                  href={`/invoices/${inv.id}`}
+                  className="text-xs text-[#2d9b6f] hover:underline shrink-0 pt-0.5"
+                >
+                  View →
+                </Link>
+              </div>
+
+              {/* Desktop layout */}
+              <div className="hidden sm:grid grid-cols-[1fr_1fr_110px_110px_90px_48px] items-center
+                              gap-4 px-6 py-4">
+                <p className="text-sm font-medium text-[#1a1a1a]">{inv.invoiceNo}</p>
+                <p className="text-sm text-[#6b6b6b] truncate">{inv.client.name}</p>
+                <p className="text-sm text-[#6b6b6b] whitespace-nowrap">{formatDate(inv.dueDate)}</p>
+                <p className="text-sm font-medium text-[#1a1a1a] text-right whitespace-nowrap">
+                  {formatCurrency(inv.total)}
+                </p>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${getStatusColor(inv.status)}`}>
+                  {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
+                </span>
+                <Link
+                  href={`/invoices/${inv.id}`}
+                  className="text-xs text-[#2d9b6f] hover:underline whitespace-nowrap"
+                >
+                  View →
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

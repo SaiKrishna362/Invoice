@@ -96,10 +96,12 @@ model InvoiceItem {
 model PasswordResetToken {
   id        String   @id @default(cuid())
   email     String
-  token     String   @unique
+  token     String
+  attempts  Int      @default(0)   // locked after 5 wrong guesses
   expiresAt DateTime
 
   @@index([email])
+  @@unique([email, token])         // same OTP may exist for different emails
 }
 
 // ============================================
@@ -108,10 +110,12 @@ model PasswordResetToken {
 model PhoneOtp {
   id        String   @id @default(cuid())
   phone     String
-  token     String   @unique
+  token     String
+  attempts  Int      @default(0)   // locked after 5 wrong guesses
   expiresAt DateTime
 
   @@index([phone])
+  @@unique([phone, token])         // same OTP may exist for different numbers
 }
 
 // ============================================

@@ -1,8 +1,16 @@
 import twilio from "twilio";
 
-// Normalise phone: strip spaces/dashes, keep leading +
+// E.164: must start with +, followed by 7–15 digits (no spaces/dashes)
+const E164_REGEX = /^\+\d{7,15}$/;
+
+// Strip spaces, dashes, and parentheses — keeps the leading +
 export function normalizePhone(phone: string): string {
   return phone.replace(/[\s\-()]/g, "");
+}
+
+// Returns true only for well-formed E.164 numbers
+export function isValidPhone(phone: string): boolean {
+  return E164_REGEX.test(phone);
 }
 
 // Returns an error string on failure, null on success
@@ -26,6 +34,6 @@ export async function sendSmsOtp(to: string, otp: string): Promise<string | null
     return null;
   } catch (err) {
     console.error("[SMS] Send error:", err);
-    return "Failed to send SMS. Please check the number and try again.";
+    return "Failed to send SMS. Please check the phone number (include country code, e.g. +91) and try again.";
   }
 }

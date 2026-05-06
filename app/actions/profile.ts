@@ -5,6 +5,14 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import crypto from "node:crypto";
 import { Resend } from "resend";
+import { verifyEmailOtp, verifyPhoneOtp, isValidOtpFormat, isValidEmail } from "@/lib/otp";
+
+// Input length limits
+const MAX_NAME    = 100;
+const MAX_EMAIL   = 254;
+const MAX_PHONE   = 20;
+const MAX_GSTIN   = 15;
+const MAX_ADDRESS = 500;
 
 function escapeHtml(s: string) {
   return s
@@ -59,7 +67,7 @@ async function sendEmailOtp(
   return error ? (error as { message?: string }).message ?? "Failed to send email." : null;
 }
 
-// ---- UPDATE PROFILE (name, GSTIN, address — no phone, no email) ----
+// ---- UPDATE PROFILE (name, GSTIN, address) ----
 export async function updateProfileAction(
   _prev: { error: string; success: boolean } | null,
   formData: FormData
@@ -71,7 +79,10 @@ export async function updateProfileAction(
   const gstin   = (formData.get("gstin")   as string)?.trim();
   const address = (formData.get("address") as string)?.trim();
 
-  if (!name) return { error: "Name is required.", success: false };
+  if (!name)                   return { error: "Name is required.", success: false };
+  if (name.length > MAX_NAME)  return { error: "Name is too long (max 100 characters).", success: false };
+  if (gstin && gstin.length > MAX_GSTIN)   return { error: "GSTIN is too long.", success: false };
+  if (address && address.length > MAX_ADDRESS) return { error: "Address is too long (max 500 characters).", success: false };
 
   await db.user.update({
     where: { id: session.user.id },
@@ -97,7 +108,9 @@ export async function sendEmailChangeOtpAction(
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
 
   const normalizedEmail = newEmail.toLowerCase().trim();
-  if (!normalizedEmail) return { error: "Email is required.", success: false };
+  if (!normalizedEmail)                    return { error: "Email is required.", success: false };
+  if (normalizedEmail.length > MAX_EMAIL)  return { error: "Invalid email.", success: false };
+  if (!isValidEmail(normalizedEmail))      return { error: "Invalid email format.", success: false };
 
   const current = await db.user.findUnique({ where: { id: session.user.id } });
   if (!current) return { error: "Unauthorized", success: false };
@@ -141,19 +154,17 @@ export async function updateEmailWithOtpAction(
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
 
   const normalizedEmail = newEmail.toLowerCase().trim();
+  if (!isValidEmail(normalizedEmail))  return { error: "Invalid email format.", success: false };
+  if (!isValidOtpFormat(otp))          return { error: "Invalid code format.", success: false };
 
   const taken = await db.user.findUnique({ where: { email: normalizedEmail } });
   if (taken && taken.id !== session.user.id)
     return { error: "This email is already in use.", success: false };
 
-  const record = await db.passwordResetToken.findFirst({
-    where: { email: normalizedEmail, token: otp },
-  });
-  if (!record)                       return { error: "Invalid code. Please check and try again.", success: false };
-  if (record.expiresAt < new Date()) return { error: "Code has expired. Please request a new one.", success: false };
+  const err = await verifyEmailOtp(normalizedEmail, otp, true);
+  if (err) return { error: err, success: false };
 
   await db.user.update({ where: { id: session.user.id }, data: { email: normalizedEmail } });
-  await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
 
   revalidatePath("/profile");
   return { error: "", success: true };
@@ -161,19 +172,21 @@ export async function updateEmailWithOtpAction(
 
 // ============================================================
 // PHONE CHANGE
-// OTP is sent via SMS to the new number to verify ownership.
 // ============================================================
 
 export async function sendPhoneChangeOtpAction(
   newPhone: string
 ): Promise<{ error: string; success: boolean }> {
-  const { sendSmsOtp, normalizePhone } = await import("@/lib/sms");
+  const { sendSmsOtp, normalizePhone, isValidPhone } = await import("@/lib/sms");
 
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
 
   const normalized = normalizePhone(newPhone);
-  if (!normalized) return { error: "Phone number is required.", success: false };
+  if (!normalized)                       return { error: "Phone number is required.", success: false };
+  if (normalized.length > MAX_PHONE)     return { error: "Invalid phone number.", success: false };
+  if (!isValidPhone(normalized))
+    return { error: "Phone must be in E.164 format, e.g. +919876543210.", success: false };
 
   const current = await db.user.findUnique({ where: { id: session.user.id } });
   if (!current) return { error: "Unauthorized", success: false };
@@ -200,21 +213,19 @@ export async function updatePhoneWithOtpAction(
   newPhone: string,
   otp: string
 ): Promise<{ error: string; success: boolean }> {
-  const { normalizePhone } = await import("@/lib/sms");
+  const { normalizePhone, isValidPhone } = await import("@/lib/sms");
 
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
 
   const normalized = normalizePhone(newPhone);
+  if (!isValidPhone(normalized))  return { error: "Invalid phone number.", success: false };
+  if (!isValidOtpFormat(otp))     return { error: "Invalid code format.", success: false };
 
-  const record = await db.phoneOtp.findFirst({
-    where: { phone: normalized, token: otp },
-  });
-  if (!record)                       return { error: "Invalid code. Please check and try again.", success: false };
-  if (record.expiresAt < new Date()) return { error: "Code has expired. Please request a new one.", success: false };
+  const err = await verifyPhoneOtp(normalized, otp);
+  if (err) return { error: err, success: false };
 
   await db.user.update({ where: { id: session.user.id }, data: { phone: normalized } });
-  await db.phoneOtp.deleteMany({ where: { phone: normalized } });
 
   revalidatePath("/profile");
   return { error: "", success: true };
@@ -232,7 +243,7 @@ export async function removePhoneAction(): Promise<{ error: string; success: boo
 // ============================================================
 // DELETE ACCOUNT
 // Sends email OTP always. Also sends SMS OTP if user has phone.
-// Both are required for deletion.
+// Both are required for deletion when phone is registered.
 // ============================================================
 
 export async function sendDeleteOtpAction(): Promise<{
@@ -282,7 +293,6 @@ export async function sendDeleteOtpAction(): Promise<{
 
     const smsErr = await sendSmsOtp(user.phone, phoneOtp);
     if (smsErr) {
-      // Roll back email OTP
       await db.passwordResetToken.deleteMany({ where: { email: user.email } });
       return { error: smsErr, success: false, hasPhone: false };
     }
@@ -298,25 +308,22 @@ export async function deleteAccountAction(
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
 
+  if (!isValidOtpFormat(emailOtp)) return { error: "Invalid email code format.", success: false };
+  if (phoneOtp && !isValidOtpFormat(phoneOtp))
+    return { error: "Invalid phone code format.", success: false };
+
   const user = await db.user.findUnique({ where: { id: session.user.id } });
   if (!user) return { error: "Unauthorized", success: false };
 
   // Verify email OTP
-  const emailRecord = await db.passwordResetToken.findFirst({
-    where: { email: user.email, token: emailOtp },
-  });
-  if (!emailRecord)                       return { error: "Invalid email code. Please check and try again.", success: false };
-  if (emailRecord.expiresAt < new Date()) return { error: "Email code has expired. Please request a new one.", success: false };
+  const emailErr = await verifyEmailOtp(user.email, emailOtp, true);
+  if (emailErr) return { error: emailErr, success: false };
 
-  // Verify phone OTP if user has phone
+  // Verify phone OTP if user has phone registered
   if (user.phone) {
     if (!phoneOtp) return { error: "Phone verification code is required.", success: false };
-    const phoneRecord = await db.phoneOtp.findFirst({
-      where: { phone: user.phone, token: phoneOtp },
-    });
-    if (!phoneRecord)                       return { error: "Invalid phone code. Please check and try again.", success: false };
-    if (phoneRecord.expiresAt < new Date()) return { error: "Phone code has expired. Please request a new one.", success: false };
-    await db.phoneOtp.deleteMany({ where: { phone: user.phone } });
+    const phoneErr = await verifyPhoneOtp(user.phone, phoneOtp);
+    if (phoneErr) return { error: phoneErr, success: false };
   }
 
   // Delete all data in dependency order

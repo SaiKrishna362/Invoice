@@ -22,6 +22,8 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { OtpInput, EMPTY_OTP } from "@/components/OtpInput";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
 import {
   updateProfileAction,
   sendEmailChangeOtpAction,
@@ -265,9 +267,15 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
   // ---- Basic profile save ----
   const [state, formAction, pending] = useActionState(updateProfileAction, null);
   const [saved, setSaved] = useState(false);
+  const [isDetailsDirty, setIsDetailsDirty] = useState(false);
+
+  const { showPrompt, proceedNavigation, cancelNavigation, clearDirty } =
+    useUnsavedChanges(isDetailsDirty);
 
   useEffect(() => {
     if (state?.success) {
+      clearDirty();
+      setIsDetailsDirty(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     }
@@ -319,6 +327,13 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
     .toUpperCase();
 
   return (
+    <>
+    {showPrompt && (
+      <UnsavedChangesModal
+        onProceed={proceedNavigation}
+        onCancel={cancelNavigation}
+      />
+    )}
     <div className="p-6 md:p-10 max-w-2xl mx-auto">
 
       {/* Header */}
@@ -363,7 +378,7 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
           </div>
         )}
 
-        <form action={formAction} className="space-y-5">
+        <form action={formAction} className="space-y-5" onInput={() => setIsDetailsDirty(true)}>
           <div>
             <label className="block text-sm font-medium text-[#1a1a1a] mb-1.5">Full name *</label>
             <input
@@ -562,5 +577,6 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
         )}
       </div>
     </div>
+    </>
   );
 }

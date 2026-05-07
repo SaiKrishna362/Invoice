@@ -23,6 +23,8 @@ import {
   updateClientAction,
   deleteClientAction,
 } from "@/app/actions/client";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
 
 interface Client {
   id: string;
@@ -48,6 +50,7 @@ function ClientForm({
   hiddenId,
   submitLabel,
   onCancel,
+  onDirty,
 }: {
   action: (payload: FormData) => void;
   state: { error: string; success: boolean } | null;
@@ -56,9 +59,10 @@ function ClientForm({
   hiddenId?: string;
   submitLabel: string;
   onCancel: () => void;
+  onDirty?: () => void;
 }) {
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-4" onInput={onDirty}>
       {hiddenId && <input type="hidden" name="id" value={hiddenId} />}
 
       {state?.error && (
@@ -164,18 +168,51 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
   const [modal, setModal] = useState<null | "add" | Client>(null);
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
 
+  // True once the user types anything in the open add/edit modal form.
+  const [isModalDirty, setIsModalDirty] = useState(false);
+  // When true, show the "unsaved changes" confirmation before closing the modal.
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // Guards page-level navigation (back button, nav links, browser close).
+  const { showPrompt, proceedNavigation, cancelNavigation, clearDirty } =
+    useUnsavedChanges(isModalDirty);
+
   const [addState, addAction, addPending] = useActionState(createClientAction, null);
   const [editState, editAction, editPending] = useActionState(updateClientAction, null);
   const [deletePending, startDelete] = useTransition();
   const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
-    if (addState?.success) setModal(null);
+    if (addState?.success) {
+      clearDirty();
+      setIsModalDirty(false);
+      setModal(null);
+    }
   }, [addState]);
 
   useEffect(() => {
-    if (editState?.success) setModal(null);
+    if (editState?.success) {
+      clearDirty();
+      setIsModalDirty(false);
+      setModal(null);
+    }
   }, [editState]);
+
+  // Close modal, prompting first if the form has unsaved edits.
+  function requestCloseModal() {
+    if (isModalDirty) {
+      setShowCloseConfirm(true);
+    } else {
+      setModal(null);
+    }
+  }
+
+  function confirmCloseModal() {
+    setShowCloseConfirm(false);
+    setIsModalDirty(false);
+    clearDirty();
+    setModal(null);
+  }
 
   const editingClient = modal !== null && modal !== "add" ? modal : null;
 
@@ -194,6 +231,20 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
 
   return (
     <>
+      {/* Unsaved changes guard — navigation away from the page */}
+      {showPrompt && (
+        <UnsavedChangesModal
+          onProceed={proceedNavigation}
+          onCancel={cancelNavigation}
+        />
+      )}
+      {/* Unsaved changes guard — closing the modal */}
+      {showCloseConfirm && (
+        <UnsavedChangesModal
+          onProceed={confirmCloseModal}
+          onCancel={() => setShowCloseConfirm(false)}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -201,7 +252,7 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
           <p className="text-sm text-[#6b6b6b] mt-1">{initialClients.length} client{initialClients.length !== 1 ? "s" : ""}</p>
         </div>
         <button
-          onClick={() => setModal("add")}
+          onClick={() => { setIsModalDirty(false); setModal("add"); }}
           className="bg-[#1a6b4a] text-white text-sm font-medium px-5 py-2.5 rounded-lg
                      hover:bg-[#2d9b6f] transition-colors"
         >
@@ -215,7 +266,7 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
           <p className="text-[#6b6b6b] text-sm mb-1">No clients yet</p>
           <p className="text-[#aaa] text-xs mb-5">Add your first client to start creating invoices</p>
           <button
-            onClick={() => setModal("add")}
+            onClick={() => { setIsModalDirty(false); setModal("add"); }}
             className="inline-block bg-[#1a6b4a] text-white text-sm px-5 py-2.5 rounded-lg
                        hover:bg-[#2d9b6f] transition-colors"
           >
@@ -244,7 +295,7 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => setModal(client)}
+                  onClick={() => { setIsModalDirty(false); setModal(client); }}
                   className="text-xs text-[#6b6b6b] hover:text-[#1a1a1a] px-3 py-1.5 rounded-lg
                              hover:bg-[#f0ece6] transition-colors"
                 >
@@ -273,7 +324,8 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
               state={addState}
               pending={addPending}
               submitLabel="Add Client"
-              onCancel={() => setModal(null)}
+              onCancel={requestCloseModal}
+              onDirty={() => setIsModalDirty(true)}
             />
           </div>
         </div>
@@ -298,7 +350,8 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
                 address: editingClient.address  ?? "",
               }}
               submitLabel="Save Changes"
-              onCancel={() => setModal(null)}
+              onCancel={requestCloseModal}
+              onDirty={() => setIsModalDirty(true)}
             />
           </div>
         </div>

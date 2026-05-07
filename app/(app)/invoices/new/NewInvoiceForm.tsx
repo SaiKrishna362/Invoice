@@ -20,6 +20,8 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createInvoiceAction } from "@/app/actions/invoice";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
 
 interface Client {
   id: string;
@@ -55,9 +57,17 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
   const [state, formAction, pending] = useActionState(createInvoiceAction, null);
   const [items, setItems] = useState<LineItem[]>([newItem()]);
   const [gstPercent, setGstPercent] = useState(18);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const { showPrompt, proceedNavigation, cancelNavigation, clearDirty } =
+    useUnsavedChanges(isDirty);
 
   useEffect(() => {
-    if (state?.invoiceId) router.push(`/invoices/${state.invoiceId}`);
+    if (state?.invoiceId) {
+      // Clear dirty flag before navigating so the guard doesn't fire.
+      clearDirty();
+      router.push(`/invoices/${state.invoiceId}`);
+    }
   }, [state, router]);
 
   function updateItem(id: string, field: keyof LineItem, value: string) {
@@ -80,6 +90,13 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
   const today = new Date().toISOString().split("T")[0];
 
   return (
+    <>
+    {showPrompt && (
+      <UnsavedChangesModal
+        onProceed={proceedNavigation}
+        onCancel={cancelNavigation}
+      />
+    )}
     <div className="p-4 sm:p-6 md:p-10 max-w-3xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-[#1a1a1a]">New Invoice</h1>
@@ -100,7 +117,8 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
         </div>
       )}
 
-      <form action={formAction} className="space-y-5">
+      {/* onInput bubbles from every input/select/textarea inside the form */}
+      <form action={formAction} className="space-y-5" onInput={() => setIsDirty(true)}>
 
         {/* Client + Due date */}
         <div className="bg-white border border-[#e0ddd6] rounded-2xl p-5 sm:p-6">
@@ -270,13 +288,14 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
 
         {/* Actions */}
         <div className="flex gap-3">
-          <a
-            href="/invoices"
+          <button
+            type="button"
+            onClick={() => router.push("/invoices")}
             className="flex-1 sm:flex-none border border-[#e0ddd6] text-sm text-[#1a1a1a]
                        px-6 py-2.5 rounded-lg hover:bg-[#f5f4f0] transition-colors text-center"
           >
             Cancel
-          </a>
+          </button>
           <button
             type="submit"
             disabled={pending || clients.length === 0}
@@ -288,5 +307,6 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
         </div>
       </form>
     </div>
+    </>
   );
 }

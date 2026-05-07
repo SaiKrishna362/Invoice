@@ -28,6 +28,8 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { parseInvoiceFileAction, createImportedInvoicesAction } from "@/app/actions/import";
 import { ParsedInvoice, ParsedItem } from "@/lib/invoice-parser";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
 
 type Step = "upload" | "preview" | "importing" | "done";
 
@@ -42,6 +44,11 @@ export default function ImportForm() {
   const [step, setStep]             = useState<Step>("upload");
   const [isPending, startTransition] = useTransition();
   const [dragOver, setDragOver]     = useState(false);
+
+  // Dirty when there are parsed invoices the user hasn't committed or discarded yet.
+  const isDirty = step === "preview" || step === "importing";
+  const { showPrompt, proceedNavigation, cancelNavigation, clearDirty } =
+    useUnsavedChanges(isDirty);
 
   // Upload step
   const [uploadError, setUploadError] = useState("");
@@ -136,6 +143,7 @@ export default function ImportForm() {
       const res = await createImportedInvoicesAction(invoices);
       if (res.error) { setImportError(res.error); setStep("preview"); return; }
       setCreated(res.created);
+      clearDirty();
       setStep("done");
     });
   }
@@ -153,8 +161,14 @@ export default function ImportForm() {
 
   // ────────────────────────────────────────────────────────────────────────
 
+  const guard = showPrompt ? (
+    <UnsavedChangesModal onProceed={proceedNavigation} onCancel={cancelNavigation} />
+  ) : null;
+
   if (step === "done") {
     return (
+      <>
+      {guard}
       <div className="bg-white border border-[#e0ddd6] rounded-xl p-8 text-center">
         <div className="w-14 h-14 bg-[#e8f5ef] rounded-full flex items-center justify-center mx-auto mb-4">
           <svg viewBox="0 0 24 24" className="w-7 h-7 text-[#1a6b4a]" fill="none" stroke="currentColor" strokeWidth={2.5}>
@@ -193,12 +207,15 @@ export default function ImportForm() {
           </button>
         </div>
       </div>
+      </>
     );
   }
 
   if (step === "preview" || step === "importing") {
     const total = invoices.length;
     return (
+      <>
+      {guard}
       <div>
         {/* Parse warnings */}
         {parseErrors.length > 0 && (
@@ -270,6 +287,7 @@ export default function ImportForm() {
           </>
         )}
       </div>
+      </>
     );
   }
 

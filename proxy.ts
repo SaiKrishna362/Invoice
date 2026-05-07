@@ -4,7 +4,7 @@ import { getToken } from "next-auth/jwt";
 
 const PROTECTED = ["/dashboard", "/invoices", "/clients", "/profile"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PROTECTED.some((p) => pathname.startsWith(p))) {

@@ -1,14 +1,25 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useTransition } from "react";
 import { loginAction } from "@/app/actions/auth";
 import { NavLink } from "@/components/NavLink";
 import { useNavigation } from "@/components/NavigationProgress";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(loginAction, null);
+  const [isSubmitting, startTransition] = useTransition();
   const { setNavigating } = useNavigation();
-  useEffect(() => { if (!pending) setNavigating(false); }, [pending]);
+
+  const isBusy = pending || isSubmitting;
+  useEffect(() => { if (!isBusy) setNavigating(false); }, [isBusy]);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setNavigating(true);
+    // Explicitly build FormData and call the action — avoids a React
+    // re-render race that can drop the server action dispatch on mobile Safari.
+    startTransition(() => formAction(new FormData(e.currentTarget)));
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -102,7 +113,7 @@ export default function LoginPage() {
           )}
 
           {/* Form */}
-          <form action={formAction} onSubmit={() => setNavigating(true)} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
 
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-[#1a1a1a]">
@@ -114,6 +125,9 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 required
                 autoComplete="email"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 className="w-full px-4 py-3 text-sm bg-white border border-[#e0ddd6] rounded-xl
                            focus:outline-none focus:ring-2 focus:ring-[#2d9b6f] focus:border-transparent
                            placeholder:text-[#ccc] transition shadow-sm"
@@ -143,12 +157,12 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={pending}
+              disabled={isBusy}
               className="w-full bg-[#1a6b4a] text-white py-3 rounded-xl text-sm font-semibold
                          hover:bg-[#2d9b6f] transition-colors shadow-sm
                          disabled:opacity-60 disabled:cursor-not-allowed mt-2"
             >
-              {pending ? "Signing in…" : "Sign in"}
+              {isBusy ? "Signing in…" : "Sign in"}
             </button>
           </form>
 

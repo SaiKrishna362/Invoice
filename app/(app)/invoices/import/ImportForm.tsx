@@ -50,6 +50,23 @@ export default function ImportForm() {
   const { showPrompt, proceedNavigation, cancelNavigation, clearDirty } =
     useUnsavedChanges(isDirty);
 
+  // Prompt before discarding preview edits via the in-step "Change file" / "Cancel" buttons.
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  function requestReset() {
+    if (isDirty) {
+      setShowResetConfirm(true);
+    } else {
+      reset();
+    }
+  }
+
+  function confirmReset() {
+    setShowResetConfirm(false);
+    clearDirty();
+    reset();
+  }
+
   // Upload step
   const [uploadError, setUploadError] = useState("");
   const [parseErrors, setParseErrors] = useState<string[]>([]);
@@ -161,9 +178,16 @@ export default function ImportForm() {
 
   // ────────────────────────────────────────────────────────────────────────
 
-  const guard = showPrompt ? (
-    <UnsavedChangesModal onProceed={proceedNavigation} onCancel={cancelNavigation} />
-  ) : null;
+  const guard = (
+    <>
+      {showPrompt && (
+        <UnsavedChangesModal onProceed={proceedNavigation} onCancel={cancelNavigation} />
+      )}
+      {showResetConfirm && (
+        <UnsavedChangesModal onProceed={confirmReset} onCancel={() => setShowResetConfirm(false)} />
+      )}
+    </>
+  );
 
   if (step === "done") {
     return (
@@ -246,7 +270,7 @@ export default function ImportForm() {
               <p className="text-sm text-[#6b6b6b]">
                 {total} invoice{total !== 1 ? "s" : ""} ready to import — review and edit below
               </p>
-              <button onClick={reset} className="text-xs text-[#6b6b6b] hover:text-[#1a1a1a]">
+              <button onClick={requestReset} className="text-xs text-[#6b6b6b] hover:text-[#1a1a1a]">
                 ← Change file
               </button>
             </div>
@@ -276,7 +300,7 @@ export default function ImportForm() {
                 {step === "importing" ? "Importing…" : `Import ${total} invoice${total !== 1 ? "s" : ""}`}
               </button>
               <button
-                onClick={reset}
+                onClick={requestReset}
                 disabled={step === "importing"}
                 className="px-5 py-2.5 border border-[#e0ddd6] text-sm rounded-lg text-[#6b6b6b]
                            hover:bg-[#f5f4f0] disabled:opacity-60 transition-colors"

@@ -316,8 +316,8 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
 
       {/* Add modal */}
       {modal === "add" && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={requestCloseModal}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-semibold text-[#1a1a1a] mb-5">Add Client</h2>
             <ClientForm
               action={addAction}
@@ -333,8 +333,8 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
 
       {/* Edit modal */}
       {editingClient && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={requestCloseModal}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-semibold text-[#1a1a1a] mb-5">Edit Client</h2>
             <ClientForm
               key={editingClient.id}

@@ -177,7 +177,7 @@ export function InvoiceActions({
       {/* Delete confirm modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
-             onClick={() => setShowDeleteConfirm(false)}>
+             onClick={() => { if (!pending) setShowDeleteConfirm(false); }}>
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm"
                onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-semibold text-[#1a1a1a] mb-1">Delete invoice?</h2>

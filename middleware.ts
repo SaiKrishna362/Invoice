@@ -1,20 +1,27 @@
-// ============================================================
-// middleware.ts — Auth guard for all protected routes
-//
-// Runs at the Edge on every request before any page renders.
-// Unauthenticated requests to protected paths are redirected
-// to /login — this covers both direct URL visits AND the RSC
-// fetch requests Next.js makes during client-side navigation,
-// which means the session check fires on every page transition,
-// not just on the initial server render of the (app) layout.
-// ============================================================
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-import NextAuth from "next-auth";
-import { authConfig } from "./auth.config";
+const PROTECTED = ["/dashboard", "/invoices", "/clients", "/profile"];
 
-export const { auth: middleware } = NextAuth(authConfig);
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (PROTECTED.some((p) => pathname.startsWith(p))) {
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+    });
+
+    if (!token) {
+      const loginUrl = new URL("/login", request.url);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
-  // Run on all paths except Next.js internals and static assets
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

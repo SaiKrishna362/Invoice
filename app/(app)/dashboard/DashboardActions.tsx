@@ -87,7 +87,7 @@ export function DashboardInvoiceRow({ invoice }: { invoice: InvoiceRow }) {
         {formatCurrency(invoice.total)}
       </p>
       <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(invoice.status)}`}>
-        {invoice.status}
+        {invoice.status.charAt(0) + invoice.status.slice(1).toLowerCase()}
       </span>
       <NavLink
         href={`/invoices/${invoice.id}`}

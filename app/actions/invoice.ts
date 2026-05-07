@@ -161,9 +161,10 @@ export async function deleteInvoiceAction(id: string): Promise<void> {
   const invoice = await db.invoice.findUnique({ where: { id } });
   if (!invoice || invoice.userId !== session.user.id) return;
 
-  // Delete line items first to satisfy the FK constraint, then the invoice
-  await db.invoiceItem.deleteMany({ where: { invoiceId: id } });
-  await db.invoice.delete({ where: { id } });
+  await db.$transaction([
+    db.invoiceItem.deleteMany({ where: { invoiceId: id } }),
+    db.invoice.delete({ where: { id } }),
+  ]);
 
   revalidatePath("/invoices");
   revalidatePath("/dashboard");

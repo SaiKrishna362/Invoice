@@ -18,6 +18,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils";
 import Link from "next/link";
+import { InvoiceListActions } from "./InvoiceListActions";
 
 const STATUSES = ["ALL", "DRAFT", "SENT", "PAID", "OVERDUE"] as const;
 
@@ -114,14 +115,14 @@ export default async function InvoicesPage({
         <div className="bg-white border border-[#e0ddd6] rounded-xl overflow-hidden">
 
           {/* Desktop table header */}
-          <div className="hidden sm:grid grid-cols-[1fr_1fr_110px_110px_90px_48px] gap-4 px-6 py-3
+          <div className="hidden sm:grid grid-cols-[1fr_1fr_110px_110px_90px_140px] gap-4 px-6 py-3
                           border-b border-[#e0ddd6] bg-[#f9f8f6]">
             <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">Invoice</span>
             <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">Client</span>
             <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">Due</span>
             <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide text-right">Amount</span>
             <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">Status</span>
-            <span />
+            <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide text-right">Actions</span>
           </div>
 
           {invoices.map((inv) => (
@@ -142,16 +143,13 @@ export default async function InvoicesPage({
                     {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
                   </span>
                 </div>
-                <Link
-                  href={`/invoices/${inv.id}`}
-                  className="text-xs text-[#2d9b6f] hover:underline shrink-0 pt-0.5"
-                >
-                  View →
-                </Link>
+                <div className="shrink-0 pt-0.5">
+                  <InvoiceListActions invoiceId={inv.id} invoiceNo={inv.invoiceNo} />
+                </div>
               </div>
 
               {/* Desktop layout */}
-              <div className="hidden sm:grid grid-cols-[1fr_1fr_110px_110px_90px_48px] items-center
+              <div className="hidden sm:grid grid-cols-[1fr_1fr_110px_110px_90px_140px] items-center
                               gap-4 px-6 py-4">
                 <p className="text-sm font-medium text-[#1a1a1a]">{inv.invoiceNo}</p>
                 <p className="text-sm text-[#6b6b6b] truncate">{inv.client.name}</p>
@@ -162,12 +160,7 @@ export default async function InvoicesPage({
                 <span className={`text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${getStatusColor(inv.status)}`}>
                   {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
                 </span>
-                <Link
-                  href={`/invoices/${inv.id}`}
-                  className="text-xs text-[#2d9b6f] hover:underline whitespace-nowrap"
-                >
-                  View →
-                </Link>
+                <InvoiceListActions invoiceId={inv.id} invoiceNo={inv.invoiceNo} />
               </div>
             </div>
           ))}

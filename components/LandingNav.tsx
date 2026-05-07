@@ -4,9 +4,13 @@ import { useState } from "react";
 import { NavLink } from "@/components/NavLink";
 
 const NAV_LINKS = [
-  { href: "#features", label: "Features" },
-  { href: "#how-it-works", label: "How it works" },
+  { id: "features",     label: "Features"     },
+  { id: "how-it-works", label: "How it works" },
 ];
+
+function scrollTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+}
 
 export function LandingNav() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -20,17 +24,17 @@ export function LandingNav() {
           tulluri<span className="text-[#2d9b6f]">.</span>
         </NavLink>
 
-        {/* Desktop links */}
+        {/* Desktop scroll links */}
         <div className="hidden md:flex items-center gap-1 flex-1">
-          {NAV_LINKS.map(({ href, label }) => (
-            <a
-              key={href}
-              href={href}
+          {NAV_LINKS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => scrollTo(id)}
               className="px-3 py-1.5 text-sm text-[#6b6b6b] hover:text-[#1a1a1a] hover:bg-[#f5f4f0]
                          rounded-lg transition-colors"
             >
               {label}
-            </a>
+            </button>
           ))}
         </div>
 
@@ -81,16 +85,15 @@ export function LandingNav() {
       {/* Mobile dropdown */}
       {menuOpen && (
         <div className="md:hidden border-t border-[#e0ddd6] bg-white px-5 py-4 space-y-1">
-          {NAV_LINKS.map(({ href, label }) => (
-            <a
-              key={href}
-              href={href}
-              onClick={() => setMenuOpen(false)}
-              className="block px-3 py-2 text-sm text-[#6b6b6b] hover:text-[#1a1a1a] hover:bg-[#f5f4f0]
-                         rounded-lg transition-colors"
+          {NAV_LINKS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => { scrollTo(id); setMenuOpen(false); }}
+              className="block w-full text-left px-3 py-2 text-sm text-[#6b6b6b] hover:text-[#1a1a1a]
+                         hover:bg-[#f5f4f0] rounded-lg transition-colors"
             >
               {label}
-            </a>
+            </button>
           ))}
           <div className="pt-2 border-t border-[#e0ddd6] mt-2">
             <NavLink

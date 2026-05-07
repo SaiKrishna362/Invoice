@@ -11,10 +11,12 @@
 
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { authConfig } from "./auth.config";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: [
     // Credential provider: user supplies email + password
     Credentials({
@@ -48,28 +50,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-
-  callbacks: {
-    // jwt() — runs when the JWT is created or refreshed.
-    // We embed the DB user ID in the token so it's always available server-side.
-    jwt({ token, user }) {
-      if (user) token.id = user.id;
-      return token;
-    },
-
-    // session() — runs when session() is called.
-    // We forward the ID from the token into session.user so pages can read it.
-    session({ session, token }) {
-      if (session.user) session.user.id = token.id as string;
-      return session;
-    },
-  },
-
-  // Redirect unauthenticated users to /login instead of the NextAuth default page
-  pages:   { signIn: "/login" },
-
-  // JWT strategy: no server-side session storage needed — token lives in a cookie
-  session: { strategy: "jwt" },
-
-  secret:  process.env.NEXTAUTH_SECRET,
 });

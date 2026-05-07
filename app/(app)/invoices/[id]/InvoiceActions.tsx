@@ -25,6 +25,7 @@ import {
   deleteInvoiceAction,
   sendInvoiceAction,
 } from "@/app/actions/invoice";
+import { Spinner } from "@/components/Spinner";
 
 type Status = "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 
@@ -109,8 +110,10 @@ export function InvoiceActions({
           onClick={handleSend}
           disabled={pending}
           className="w-full bg-[#1a6b4a] text-white text-sm py-2.5 rounded-lg
-                     hover:bg-[#2d9b6f] transition-colors font-medium disabled:opacity-60"
+                     hover:bg-[#2d9b6f] transition-colors font-medium disabled:opacity-60
+                     flex items-center justify-center gap-2"
         >
+          {isBusy("send") && <Spinner />}
           {isBusy("send") ? "Sending…" : "Send Invoice"}
         </button>
       )}
@@ -121,8 +124,10 @@ export function InvoiceActions({
           onClick={() => handleStatus("PAID")}
           disabled={pending}
           className="w-full bg-green-600 text-white text-sm py-2.5 rounded-lg
-                     hover:bg-green-700 transition-colors font-medium disabled:opacity-60"
+                     hover:bg-green-700 transition-colors font-medium disabled:opacity-60
+                     flex items-center justify-center gap-2"
         >
+          {isBusy("PAID") && <Spinner />}
           {isBusy("PAID") ? "Updating…" : "Mark as Paid"}
         </button>
       )}
@@ -132,8 +137,10 @@ export function InvoiceActions({
           onClick={() => handleStatus("SENT")}
           disabled={pending}
           className="w-full border border-[#e0ddd6] text-sm text-[#6b6b6b] py-2.5 rounded-lg
-                     hover:bg-[#f5f4f0] transition-colors disabled:opacity-60"
+                     hover:bg-[#f5f4f0] transition-colors disabled:opacity-60
+                     flex items-center justify-center gap-2"
         >
+          {isBusy("SENT") && <Spinner />}
           {isBusy("SENT") ? "Updating…" : "Mark as Sent"}
         </button>
       )}
@@ -143,8 +150,10 @@ export function InvoiceActions({
           onClick={() => handleStatus("PAID")}
           disabled={pending}
           className="w-full bg-green-600 text-white text-sm py-2.5 rounded-lg
-                     hover:bg-green-700 transition-colors font-medium disabled:opacity-60"
+                     hover:bg-green-700 transition-colors font-medium disabled:opacity-60
+                     flex items-center justify-center gap-2"
         >
+          {isBusy("PAID") && <Spinner />}
           {isBusy("PAID") ? "Updating…" : "Mark as Paid"}
         </button>
       )}
@@ -154,8 +163,10 @@ export function InvoiceActions({
           onClick={() => handleStatus("OVERDUE" === status ? "DRAFT" : "OVERDUE")}
           disabled={pending}
           className="w-full border border-[#e0ddd6] text-sm text-[#6b6b6b] py-2.5 rounded-lg
-                     hover:bg-[#f5f4f0] transition-colors disabled:opacity-60"
+                     hover:bg-[#f5f4f0] transition-colors disabled:opacity-60
+                     flex items-center justify-center gap-2"
         >
+          {(isBusy("OVERDUE") || isBusy("DRAFT")) && <Spinner />}
           {status === "DRAFT"
             ? isBusy("OVERDUE") ? "Updating…" : "Mark as Overdue"
             : isBusy("DRAFT")   ? "Updating…" : "Revert to Draft"}
@@ -174,8 +185,10 @@ export function InvoiceActions({
 
       {/* Delete confirm modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+             onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm"
+               onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-semibold text-[#1a1a1a] mb-1">Delete invoice?</h2>
             <p className="text-sm text-[#6b6b6b] mb-6">
               This action cannot be undone. The invoice will be permanently deleted.
@@ -193,8 +206,10 @@ export function InvoiceActions({
                 onClick={handleDelete}
                 disabled={pending}
                 className="flex-1 bg-red-500 text-white text-sm py-2.5 rounded-lg
-                           hover:bg-red-600 transition-colors disabled:opacity-50"
+                           hover:bg-red-600 transition-colors disabled:opacity-50
+                           flex items-center justify-center gap-2"
               >
+                {isBusy("delete") && <Spinner />}
                 {isBusy("delete") ? "Deleting…" : "Yes, Delete"}
               </button>
             </div>

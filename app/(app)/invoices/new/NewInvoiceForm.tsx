@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import { createInvoiceAction } from "@/app/actions/invoice";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
+import { Spinner } from "@/components/Spinner";
 
 interface Client {
   id: string;
@@ -300,8 +301,10 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
             type="submit"
             disabled={pending || clients.length === 0}
             className="flex-1 sm:flex-none bg-[#1a6b4a] text-white px-6 py-2.5 rounded-lg
-                       text-sm font-medium hover:bg-[#2d9b6f] transition-colors disabled:opacity-60"
+                       text-sm font-medium hover:bg-[#2d9b6f] transition-colors disabled:opacity-60
+                       flex items-center justify-center gap-2"
           >
+            {pending && <Spinner />}
             {pending ? "Creating…" : "Create Invoice"}
           </button>
         </div>

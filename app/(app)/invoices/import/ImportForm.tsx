@@ -30,6 +30,7 @@ import { parseInvoiceFileAction, createImportedInvoicesAction } from "@/app/acti
 import { ParsedInvoice, ParsedItem } from "@/lib/invoice-parser";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
+import { Spinner } from "@/components/Spinner";
 
 type Step = "upload" | "preview" | "importing" | "done";
 
@@ -295,8 +296,10 @@ export default function ImportForm() {
                 onClick={handleImport}
                 disabled={step === "importing"}
                 className="flex-1 sm:flex-none px-6 py-2.5 bg-[#1a6b4a] text-white text-sm font-medium
-                           rounded-lg hover:bg-[#2d9b6f] disabled:opacity-60 transition-colors"
+                           rounded-lg hover:bg-[#2d9b6f] disabled:opacity-60 transition-colors
+                           flex items-center justify-center gap-2"
               >
+                {step === "importing" && <Spinner />}
                 {step === "importing" ? "Importing…" : `Import ${total} invoice${total !== 1 ? "s" : ""}`}
               </button>
               <button
@@ -345,7 +348,10 @@ export default function ImportForm() {
         </div>
 
         {isPending ? (
-          <p className="text-sm text-[#6b6b6b]">Reading file…</p>
+          <div className="flex items-center justify-center gap-2 text-sm text-[#6b6b6b]">
+            <Spinner className="w-5 h-5" />
+            Reading file…
+          </div>
         ) : (
           <>
             <p className="text-sm font-medium text-[#1a1a1a]">Drop your file here or click to browse</p>

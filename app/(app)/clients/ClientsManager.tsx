@@ -25,6 +25,7 @@ import {
 } from "@/app/actions/client";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
+import { Spinner } from "@/components/Spinner";
 
 interface Client {
   id: string;
@@ -144,8 +145,10 @@ function ClientForm({
           type="submit"
           disabled={pending}
           className="flex-1 bg-[#1a6b4a] text-white text-sm py-2.5 rounded-lg
-                     hover:bg-[#2d9b6f] transition-colors disabled:opacity-60"
+                     hover:bg-[#2d9b6f] transition-colors disabled:opacity-60
+                     flex items-center justify-center gap-2"
         >
+          {pending && <Spinner />}
           {pending ? "Saving…" : submitLabel}
         </button>
       </div>
@@ -381,8 +384,10 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
                 onClick={handleDelete}
                 disabled={deletePending}
                 className="flex-1 bg-red-500 text-white text-sm py-2.5 rounded-lg
-                           hover:bg-red-600 transition-colors disabled:opacity-50"
+                           hover:bg-red-600 transition-colors disabled:opacity-50
+                           flex items-center justify-center gap-2"
               >
+                {deletePending && <Spinner />}
                 {deletePending ? "Deleting…" : "Delete"}
               </button>
             </div>

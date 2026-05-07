@@ -15,6 +15,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { deleteInvoiceAction } from "@/app/actions/invoice";
+import { Spinner } from "@/components/Spinner";
 
 /**
  * Renders "View →" + "Delete" for a single invoice row.
@@ -97,8 +98,10 @@ export function InvoiceListActions({
                 onClick={handleDelete}
                 disabled={pending}
                 className="flex-1 bg-red-500 text-white text-sm py-2.5 rounded-lg
-                           hover:bg-red-600 transition-colors disabled:opacity-50 font-medium"
+                           hover:bg-red-600 transition-colors disabled:opacity-50 font-medium
+                           flex items-center justify-center gap-2"
               >
+                {pending && <Spinner />}
                 {pending ? "Deleting…" : "Yes, Delete"}
               </button>
             </div>

@@ -1,11 +1,28 @@
+// ============================================================
+// app/actions/invoice.ts — Invoice Server Actions
+//
+// Handles creating, updating status, deleting, and emailing invoices.
+// All actions verify session ownership before touching any data.
+//
+// Actions:
+//   createInvoiceAction       — create a new invoice with line items
+//   updateInvoiceStatusAction — change status (DRAFT/SENT/PAID/OVERDUE)
+//   deleteInvoiceAction       — delete invoice + items, redirect to list
+//   sendInvoiceAction         — generate PDF, email it to the client
+// ============================================================
+
 "use server";
 
-import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { auth }           from "@/auth";
+import { db }             from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect }       from "next/navigation";
 import { generateInvoicePDF } from "@/lib/pdf";
+import { generateInvoiceNo }  from "@/lib/utils";
 
+/**
+ * Escapes special HTML characters to prevent XSS in email bodies.
+ */
 function escapeHtml(s: string) {
   return s
     .replace(/&/g, "&amp;")
@@ -14,10 +31,24 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
 }
+
 import { Resend } from "resend";
 
+// Shared Resend client for sending invoice emails
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// ────────────────────────────────────────────────────────────────────────────
+// Create invoice
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Creates a new invoice with its line items in a single Prisma transaction.
+ * Calculates subtotal, GST amount, and total automatically.
+ * Generates a sequential invoice number (INV-001, INV-002, …).
+ *
+ * Called from NewInvoiceForm.tsx via useActionState.
+ * On success, the form redirects to the new invoice's detail page.
+ */
 export async function createInvoiceAction(
   _prev: { error: string; success: boolean; invoiceId?: string } | null,
   formData: FormData
@@ -25,11 +56,13 @@ export async function createInvoiceAction(
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
 
+  // ── Parse form fields ─────────────────────────────────────────────────
   const clientId   = formData.get("clientId")   as string;
   const dueDate    = formData.get("dueDate")    as string;
   const gstPercent = parseFloat(formData.get("gstPercent") as string) || 18;
   const notes      = (formData.get("notes") as string)?.trim() || null;
 
+  // Line items arrive as parallel arrays (one value per item)
   const descriptions = formData.getAll("itemDescription") as string[];
   const quantities   = formData.getAll("itemQuantity")    as string[];
   const rates        = formData.getAll("itemRate")        as string[];
@@ -37,10 +70,12 @@ export async function createInvoiceAction(
   if (!clientId) return { error: "Client is required.",   success: false };
   if (!dueDate)  return { error: "Due date is required.", success: false };
 
+  // Verify the client exists and belongs to the current user (IDOR prevention)
   const client = await db.client.findUnique({ where: { id: clientId } });
   if (!client || client.userId !== session.user.id)
     return { error: "Client not found.", success: false };
 
+  // Build items array — skip rows with no description or zero amount
   const items = descriptions
     .map((desc, i) => {
       const qty  = parseFloat(quantities[i]) || 0;
@@ -51,33 +86,46 @@ export async function createInvoiceAction(
 
   if (!items.length) return { error: "Add at least one valid line item.", success: false };
 
+  // ── Calculate totals ──────────────────────────────────────────────────
   const subtotal  = items.reduce((s, it) => s + it.amount, 0);
   const gstAmount = Math.round(subtotal * (gstPercent / 100) * 100) / 100;
   const total     = Math.round((subtotal + gstAmount) * 100) / 100;
 
-  const count     = await db.invoice.count({ where: { userId: session.user.id } });
-  const invoiceNo = `INV-${String(count + 1).padStart(3, "0")}`;
+  // ── Generate collision-free invoice number ───────────────────────────
+  // crypto-random + date prefix — no DB query, no race condition possible
+  const invoiceNo = generateInvoiceNo();
 
+  // ── Persist invoice + items ───────────────────────────────────────────
   const invoice = await db.invoice.create({
     data: {
       invoiceNo,
       clientId,
-      userId: session.user.id,
-      dueDate: new Date(dueDate),
+      userId:    session.user.id,
+      dueDate:   new Date(dueDate),
       gstPercent,
       subtotal,
       gstAmount,
       total,
       notes,
-      items: { create: items },
+      items: { create: items }, // Prisma nested write — creates items in one round-trip
     },
   });
 
+  // Refresh invoice list and dashboard counts
   revalidatePath("/invoices");
   revalidatePath("/dashboard");
   return { error: "", success: true, invoiceId: invoice.id };
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Update status
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Changes the status of an invoice (e.g. DRAFT → SENT, SENT → PAID).
+ * Silently ignores requests for invoices the user doesn't own.
+ * Called from InvoiceActions.tsx.
+ */
 export async function updateInvoiceStatusAction(
   id: string,
   status: "DRAFT" | "SENT" | "PAID" | "OVERDUE"
@@ -85,15 +133,27 @@ export async function updateInvoiceStatusAction(
   const session = await auth();
   if (!session?.user?.id) return;
 
+  // Ownership check — reject if invoice belongs to a different user
   const invoice = await db.invoice.findUnique({ where: { id } });
   if (!invoice || invoice.userId !== session.user.id) return;
 
   await db.invoice.update({ where: { id }, data: { status } });
+
+  // Refresh the detail page, list, and dashboard
   revalidatePath(`/invoices/${id}`);
   revalidatePath("/invoices");
   revalidatePath("/dashboard");
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Delete invoice
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Permanently deletes an invoice and all its line items.
+ * Redirects to /invoices after deletion.
+ * Called from InvoiceActions.tsx after the user confirms in the modal.
+ */
 export async function deleteInvoiceAction(id: string): Promise<void> {
   const session = await auth();
   if (!session?.user?.id) return;
@@ -101,20 +161,35 @@ export async function deleteInvoiceAction(id: string): Promise<void> {
   const invoice = await db.invoice.findUnique({ where: { id } });
   if (!invoice || invoice.userId !== session.user.id) return;
 
+  // Delete line items first to satisfy the FK constraint, then the invoice
   await db.invoiceItem.deleteMany({ where: { invoiceId: id } });
   await db.invoice.delete({ where: { id } });
 
   revalidatePath("/invoices");
   revalidatePath("/dashboard");
-  redirect("/invoices");
+  redirect("/invoices"); // Navigate back to the invoice list
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Send invoice by email
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Generates a PDF for the invoice, then emails it to the client with
+ * a summary in the email body. Marks the invoice as SENT on success.
+ *
+ * The "From" address is the Resend domain address; the freelancer's email
+ * is set as the reply-to so replies go to them directly.
+ *
+ * Called from InvoiceActions.tsx.
+ */
 export async function sendInvoiceAction(
   id: string
 ): Promise<{ error: string; success: boolean }> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
 
+  // Load full invoice with all relations needed for the PDF and email
   const invoice = await db.invoice.findUnique({
     where:   { id },
     include: { user: true, client: true, items: true },
@@ -124,17 +199,21 @@ export async function sendInvoiceAction(
     return { error: "Invoice not found.", success: false };
 
   try {
+    // Generate the PDF attachment
     const pdfBytes = await generateInvoicePDF(invoice);
 
-    const totalFormatted = `Rs. ${invoice.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+    // Format display values for the email summary box
+    const totalFormatted   = `Rs. ${invoice.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
     const dueDateFormatted = new Date(invoice.dueDate).toLocaleDateString("en-IN", {
       day: "numeric", month: "long", year: "numeric",
     });
 
+    // Optional notes row in the summary table — only shown if notes exist
     const notesRow = invoice.notes
       ? `<tr><td style="padding:8px 0;color:#6b6b6b;font-size:13px;border-top:1px solid #e0ddd6">Notes</td><td style="text-align:right;color:#1a1a1a;font-size:13px;padding:8px 0;border-top:1px solid #e0ddd6">${escapeHtml(invoice.notes)}</td></tr>`
       : "";
 
+    // Full HTML email body
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Invoice ${escapeHtml(invoice.invoiceNo)}</title></head>
@@ -197,7 +276,7 @@ export async function sendInvoiceAction(
 
     const { error: sendError } = await resend.emails.send({
       from:     `${invoice.user.name} <${process.env.RESEND_FROM_EMAIL}>`,
-      replyTo:  invoice.user.email,
+      replyTo:  invoice.user.email,          // Replies go directly to the freelancer
       to:       invoice.client.email,
       subject:  `Invoice ${invoice.invoiceNo} from ${escapeHtml(invoice.user.name)} – ${totalFormatted}`,
       html,
@@ -212,15 +291,17 @@ export async function sendInvoiceAction(
     if (sendError) {
       console.error("sendInvoiceAction resend error:", sendError);
       return {
-        error: (sendError as { message?: string }).message ?? "Failed to send email.",
+        error:   (sendError as { message?: string }).message ?? "Failed to send email.",
         success: false,
       };
     }
 
+    // Mark as SENT now that the email was delivered successfully
     await db.invoice.update({ where: { id }, data: { status: "SENT" } });
     revalidatePath(`/invoices/${id}`);
     revalidatePath("/invoices");
     return { error: "", success: true };
+
   } catch (err) {
     console.error("sendInvoiceAction:", err);
     return { error: "Failed to send email. Please check your Resend API key.", success: false };

@@ -1,3 +1,15 @@
+// ============================================================
+// components/SignOutButton.tsx — Sign Out Button with Confirm
+//
+// Client component used in both Navbar (desktop) and MobileMenu.
+// Shows "Sign out" as a text button. Clicking it opens a small
+// confirmation modal before actually calling logoutAction, which
+// prevents accidental sign-outs.
+//
+// logoutAction calls Auth.js signOut() server-side and redirects
+// the browser to /login.
+// ============================================================
+
 "use client";
 
 import { useState, useTransition } from "react";

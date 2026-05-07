@@ -1,3 +1,12 @@
+// ============================================================
+// app/(app)/clients/page.tsx — Clients List Page
+//
+// Server component that fetches the user's clients and passes
+// them to the ClientsManager client component.
+//
+// Route: /clients (protected by the (app) layout auth guard)
+// ============================================================
+
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ClientsManager } from "./ClientsManager";

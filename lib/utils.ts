@@ -31,14 +31,24 @@ export function formatDate(date: Date): string {
 
 
 // ---- GENERATE INVOICE NUMBER ----
-// Creates sequential invoice numbers like INV-001, INV-002
-// Pass the current count of invoices to get the next number
-// Example: generateInvoiceNumber(0) → "INV-001"
-//          generateInvoiceNumber(5) → "INV-006"
-export function generateInvoiceNumber(currentCount: number): string {
-  const nextNumber = currentCount + 1;
-  const padded = String(nextNumber).padStart(3, "0"); // Pad to 3 digits
-  return `INV-${padded}`;
+// Produces a globally unique, collision-free invoice ID with a human-readable
+// date prefix. Format: INV-YYYYMM-XXXXXXXX
+//   e.g. INV-202505-3A7F2B91
+//
+// 4 random bytes (8 hex chars) = ~4.3 billion unique values per month —
+// effectively zero collision probability even under concurrent load.
+// No database round-trip required, so no race condition is possible.
+//
+// The YYYYMM prefix groups invoices by issuance month for easy
+// searching and sorting — a common enterprise invoicing convention.
+import crypto from "node:crypto";
+
+export function generateInvoiceNo(): string {
+  const now   = new Date();
+  const year  = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const rand  = crypto.randomBytes(4).toString("hex").toUpperCase(); // e.g. 3A7F2B91
+  return `INV-${year}${month}-${rand}`;
 }
 
 

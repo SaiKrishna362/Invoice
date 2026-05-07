@@ -1,3 +1,19 @@
+// ============================================================
+// app/(app)/invoices/page.tsx — Invoice List Page
+//
+// Server component that renders the invoice list with a status
+// filter. The active filter is read from the `?status=` query
+// parameter and applied directly in the Prisma query.
+//
+// Features:
+//   - Filter tabs: All / Draft / Sent / Paid / Overdue
+//   - Dual-layout rows: stacked on mobile, table-style on desktop
+//   - Import button (→ /invoices/import) and New button (→ /invoices/new)
+//   - Empty state with CTA to create the first invoice
+//
+// Route: /invoices (protected by the (app) layout auth guard)
+// ============================================================
+
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils";
@@ -38,13 +54,22 @@ export default async function InvoicesPage({
             {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link
-          href="/invoices/new"
-          className="bg-[#1a6b4a] text-white text-sm font-medium px-4 py-2.5 rounded-lg
-                     hover:bg-[#2d9b6f] transition-colors whitespace-nowrap"
-        >
-          + New
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/invoices/import"
+            className="border border-[#e0ddd6] text-[#6b6b6b] text-sm font-medium px-4 py-2.5 rounded-lg
+                       hover:bg-[#f5f4f0] transition-colors whitespace-nowrap"
+          >
+            Import
+          </Link>
+          <Link
+            href="/invoices/new"
+            className="bg-[#1a6b4a] text-white text-sm font-medium px-4 py-2.5 rounded-lg
+                       hover:bg-[#2d9b6f] transition-colors whitespace-nowrap"
+          >
+            + New
+          </Link>
+        </div>
       </div>
 
       {/* Status filter tabs — horizontal scroll on mobile */}

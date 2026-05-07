@@ -1,3 +1,20 @@
+// ============================================================
+// app/(app)/invoices/new/NewInvoiceForm.tsx — New Invoice Form
+//
+// Client component for creating a new invoice. The form is split
+// into four cards: Invoice Details, Line Items, Tax & Total, Notes.
+//
+// Line items are managed in local React state (not hidden inputs)
+// so the totals update live as the user types. On submit, the items
+// are serialised into parallel FormData arrays (itemDescription[],
+// itemQuantity[], itemRate[]) that createInvoiceAction reads.
+//
+// On success (state.invoiceId is set), the router navigates to the
+// new invoice's detail page.
+//
+// Route: /invoices/new (protected by the (app) layout auth guard)
+// ============================================================
+
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
@@ -26,6 +43,13 @@ const newItem = (): LineItem => ({
 
 const INPUT = "w-full px-3 py-2 text-sm border border-[#e0ddd6] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d9b6f]";
 
+/**
+ * Full-page form for creating a new invoice.
+ *
+ * @param clients  The user's client list (fetched server-side in page.tsx).
+ *                 Shown in the client dropdown; if empty, the submit button
+ *                 is disabled and a prompt to add a client is shown instead.
+ */
 export function NewInvoiceForm({ clients }: { clients: Client[] }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(createInvoiceAction, null);

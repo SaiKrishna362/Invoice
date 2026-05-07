@@ -1,3 +1,19 @@
+// ============================================================
+// components/OtpInput.tsx — 6-Digit OTP Input
+//
+// Accessible one-digit-per-box OTP entry component.
+// Keyboard behaviour mirrors what users expect from SMS apps:
+//   - Typing a digit moves focus to the next box automatically
+//   - Backspace on an empty box moves focus back to the previous box
+//   - Pasting a 6-digit string fills all boxes at once
+//
+// State is lifted: the parent owns the `otp` array and provides
+// an `onChange` callback. This lets the parent validate or submit
+// the code without needing a ref to the input.
+//
+// EMPTY_OTP() is exported so parents can reset the input easily.
+// ============================================================
+
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -8,6 +24,14 @@ interface Props {
   autoFocus?: boolean;
 }
 
+/**
+ * Six-box OTP input.
+ * Controlled component — the parent owns the array via `otp` + `onChange`.
+ *
+ * @param otp        Array of 6 single-digit strings (use EMPTY_OTP() to initialise)
+ * @param onChange   Called with the updated array whenever a digit changes
+ * @param autoFocus  If true, the first box is focused on mount
+ */
 export function OtpInput({ otp, onChange, autoFocus = false }: Props) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 

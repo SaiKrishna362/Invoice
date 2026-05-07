@@ -1,3 +1,17 @@
+// ============================================================
+// components/MobileMenu.tsx — Mobile Hamburger Navigation
+//
+// Client component used by Navbar.tsx on screens narrower than `md`.
+// Renders a hamburger (☰) / close (✕) icon button that toggles a
+// full-width dropdown panel with:
+//   - The same NAV_LINKS as the desktop nav
+//   - A link to /profile showing the user's name
+//   - The SignOutButton
+//
+// The dropdown is positioned absolute below the navbar using
+// `top-full` so it overlays page content without shifting layout.
+// ============================================================
+
 "use client";
 
 import { useState } from "react";
@@ -10,6 +24,11 @@ const NAV_LINKS = [
   { href: "/clients",   label: "Clients"   },
 ];
 
+/**
+ * Mobile navigation menu (hamburger button + slide-down panel).
+ *
+ * @param userName  Displayed as the profile link label. Falls back to "Profile".
+ */
 export function MobileMenu({ userName }: { userName?: string | null }) {
   const [open, setOpen] = useState(false);
 

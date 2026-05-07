@@ -1,3 +1,17 @@
+// ============================================================
+// app/(app)/dashboard/page.tsx — Dashboard Overview Page
+//
+// Server component that renders the main dashboard:
+//   - Personalised greeting with the user's first name
+//   - Three summary stat cards: Total Revenue, Pending, Overdue
+//   - Table of the 5 most recent invoices with quick links
+//
+// All data is fetched in a single DB query and computed server-side
+// so the page can be fully rendered on the server with no client JS.
+//
+// Route: /dashboard (protected by the (app) layout auth guard)
+// ============================================================
+
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils";

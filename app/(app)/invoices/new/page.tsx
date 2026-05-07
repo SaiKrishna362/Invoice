@@ -1,3 +1,15 @@
+// ============================================================
+// app/(app)/invoices/new/page.tsx — New Invoice Page
+//
+// Server component that fetches the user's clients (name + email only)
+// and passes them to the NewInvoiceForm client component.
+//
+// Only id, name, and email are fetched — just enough to populate
+// the client dropdown without over-fetching.
+//
+// Route: /invoices/new (protected by the (app) layout auth guard)
+// ============================================================
+
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NewInvoiceForm } from "./NewInvoiceForm";

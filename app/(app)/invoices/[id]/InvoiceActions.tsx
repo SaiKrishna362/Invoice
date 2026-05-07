@@ -1,3 +1,22 @@
+// ============================================================
+// app/(app)/invoices/[id]/InvoiceActions.tsx — Invoice Action Sidebar
+//
+// Client component that renders the action buttons on the invoice
+// detail page sidebar. All mutations call server actions directly
+// via useTransition (no forms needed — simple button clicks).
+//
+// Buttons shown depend on the current status:
+//   Any status  — Download PDF (link to /api/invoices/:id/pdf)
+//   Non-PAID    — Send Invoice (generates PDF + emails client)
+//   SENT        — Mark as Paid / Mark as Sent (revert)
+//   PAID        — Mark as Sent (revert to sent)
+//   DRAFT/OVR   — Toggle between Draft ↔ Overdue
+//   Any status  — Delete Invoice (with confirm modal)
+//
+// `activeAction` tracks which button is in-flight so each button
+// shows its own spinner without disabling all other buttons.
+// ============================================================
+
 "use client";
 
 import { useState, useTransition } from "react";
@@ -9,6 +28,13 @@ import {
 
 type Status = "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 
+/**
+ * Sidebar action panel for an individual invoice.
+ *
+ * @param invoiceId   Database ID of the invoice
+ * @param status      Current invoice status — determines which buttons appear
+ * @param clientEmail Shown in the success banner after sending the invoice
+ */
 export function InvoiceActions({
   invoiceId,
   status,
@@ -23,6 +49,8 @@ export function InvoiceActions({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
 
+  // Generic transition runner — tracks which button label is active
+  // so we can show "Sending…" on one button without freezing the others.
   function run(action: string, fn: () => Promise<void> | void) {
     setActiveAction(action);
     startTransition(async () => {

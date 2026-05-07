@@ -1,3 +1,16 @@
+// ============================================================
+// app/login/page.tsx — Login Page
+//
+// Client component with a simple email + password form.
+// Submits to loginAction (a server action that calls Auth.js
+// signIn("credentials", ...)) via useActionState.
+//
+// On success Auth.js sets the session cookie and the (app) layout
+// allows the user through. On failure the error is shown inline.
+//
+// Route: /login (public)
+// ============================================================
+
 "use client";
 
 import { useActionState } from "react";

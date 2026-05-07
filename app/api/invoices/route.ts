@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { generateInvoiceNumber, calculateGST } from "@/lib/utils";
+import { generateInvoiceNo, calculateGST } from "@/lib/utils";
 
 // ============================================
 // GET — List all invoices
@@ -90,9 +90,8 @@ export async function POST(req: Request) {
     const { gstAmount, total } = calculateGST(subtotal, gstPercent);
 
     // ---- GENERATE INVOICE NUMBER ----
-    // Count how many invoices this user already has
-    const count = await db.invoice.count({ where: { userId: session.user.id } });
-    const invoiceNo = generateInvoiceNumber(count); // e.g. "INV-003"
+    // crypto-random + date prefix — no DB query, no race condition possible
+    const invoiceNo = generateInvoiceNo(); // e.g. "INV-202505-3A7F2B91"
 
     // ---- CREATE INVOICE + ITEMS IN ONE DB CALL ----
     // Prisma lets us create the invoice and all its items together

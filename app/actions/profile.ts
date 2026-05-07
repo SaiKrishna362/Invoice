@@ -1,3 +1,22 @@
+// ============================================================
+// app/actions/profile.ts — Profile & Account Management Actions
+//
+// Server actions for everything on the /profile page:
+//   updateProfileAction         — update name, GSTIN, address
+//   sendEmailChangeOtpAction    — send OTP to a new email address
+//   updateEmailWithOtpAction    — verify OTP and commit the new email
+//   sendPhoneChangeOtpAction    — send SMS OTP to a new phone number
+//   updatePhoneWithOtpAction    — verify OTP and commit the new phone
+//   removePhoneAction           — unlink phone without OTP (user-initiated)
+//   sendDeleteOtpAction         — send email (+ optional SMS) OTPs for account deletion
+//   deleteAccountAction         — verify OTPs then delete all user data in order
+//   logoutAfterDeleteAction     — call signOut after a successful deletion
+//
+// All actions verify the session before touching any data.
+// Email and phone changes require OTP verification to prevent takeovers.
+// Account deletion requires both email AND phone OTP when a phone is set.
+// ============================================================
+
 "use server";
 
 import { auth, signOut } from "@/auth";
@@ -7,13 +26,14 @@ import crypto from "node:crypto";
 import { Resend } from "resend";
 import { verifyEmailOtp, verifyPhoneOtp, isValidOtpFormat, isValidEmail } from "@/lib/otp";
 
-// Input length limits
+// Input length limits — mirror the DB column constraints
 const MAX_NAME    = 100;
 const MAX_EMAIL   = 254;
 const MAX_PHONE   = 20;
 const MAX_GSTIN   = 15;
 const MAX_ADDRESS = 500;
 
+/** Escapes special HTML characters to prevent XSS in email bodies. */
 function escapeHtml(s: string) {
   return s
     .replace(/&/g, "&amp;")
@@ -23,6 +43,17 @@ function escapeHtml(s: string) {
     .replace(/'/g, "&#x27;");
 }
 
+/**
+ * Sends a branded OTP email using Resend.
+ * Returns null on success, or the error message string on failure.
+ *
+ * @param to           Recipient email address
+ * @param otp          The 6-digit code to display in the email
+ * @param subject      Email subject line
+ * @param heading      Bold heading text shown in the green (or red) header block
+ * @param body         HTML body content above the OTP box
+ * @param headingColor Hex colour for the header background (green for normal, red for danger zone)
+ */
 async function sendEmailOtp(
   to: string,
   otp: string,
@@ -67,7 +98,15 @@ async function sendEmailOtp(
   return error ? (error as { message?: string }).message ?? "Failed to send email." : null;
 }
 
-// ---- UPDATE PROFILE (name, GSTIN, address) ----
+// ────────────────────────────────────────────────────────────────────────────
+// Update profile
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Saves the user's name, GSTIN, and address.
+ * These three fields appear on every PDF invoice, so they must be kept current.
+ * Called from ProfileForm.tsx via useActionState.
+ */
 export async function updateProfileAction(
   _prev: { error: string; success: boolean } | null,
   formData: FormData
@@ -97,10 +136,18 @@ export async function updateProfileAction(
   return { error: "", success: true };
 }
 
-// ============================================================
-// EMAIL CHANGE
-// ============================================================
+// ────────────────────────────────────────────────────────────────────────────
+// Email change (two-step: send OTP → verify + commit)
+// ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Step 1 of the email-change flow.
+ * Validates the new address, checks it isn't already taken, then emails
+ * a 6-digit OTP to the NEW address (not the current one) so the user
+ * proves they control the destination before we switch.
+ *
+ * @param newEmail The email address the user wants to switch to
+ */
 export async function sendEmailChangeOtpAction(
   newEmail: string
 ): Promise<{ error: string; success: boolean }> {
@@ -146,6 +193,15 @@ export async function sendEmailChangeOtpAction(
   return { error: "", success: true };
 }
 
+/**
+ * Step 2 of the email-change flow.
+ * Verifies the OTP and atomically updates the user's email.
+ * We re-check that the address isn't taken here in case another user
+ * registered with it between step 1 and step 2.
+ *
+ * @param newEmail The new email (must match what was used in sendEmailChangeOtpAction)
+ * @param otp      The 6-digit code the user received
+ */
 export async function updateEmailWithOtpAction(
   newEmail: string,
   otp: string
@@ -170,10 +226,19 @@ export async function updateEmailWithOtpAction(
   return { error: "", success: true };
 }
 
-// ============================================================
-// PHONE CHANGE
-// ============================================================
+// ────────────────────────────────────────────────────────────────────────────
+// Phone change (two-step: send SMS OTP → verify + commit)
+// ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Step 1 of the phone-change flow.
+ * Validates the number in E.164 format, sends a 6-digit SMS OTP to the
+ * NEW number, and stores the code in the PhoneOtp table.
+ *
+ * sms.ts is imported dynamically so Twilio is only loaded when needed.
+ *
+ * @param newPhone Target phone number in E.164 format (e.g. +919876543210)
+ */
 export async function sendPhoneChangeOtpAction(
   newPhone: string
 ): Promise<{ error: string; success: boolean }> {
@@ -209,6 +274,13 @@ export async function sendPhoneChangeOtpAction(
   return { error: "", success: true };
 }
 
+/**
+ * Step 2 of the phone-change flow.
+ * Verifies the SMS OTP and saves the normalised phone number to the user record.
+ *
+ * @param newPhone The phone number (must match what was sent in sendPhoneChangeOtpAction)
+ * @param otp      The 6-digit code the user received by SMS
+ */
 export async function updatePhoneWithOtpAction(
   newPhone: string,
   otp: string
@@ -231,6 +303,11 @@ export async function updatePhoneWithOtpAction(
   return { error: "", success: true };
 }
 
+/**
+ * Removes the phone number from the user's account.
+ * No OTP required — the user is already authenticated and this is a voluntary removal.
+ * If the account has no phone, calling this is a no-op.
+ */
 export async function removePhoneAction(): Promise<{ error: string; success: boolean }> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
@@ -240,12 +317,18 @@ export async function removePhoneAction(): Promise<{ error: string; success: boo
   return { error: "", success: true };
 }
 
-// ============================================================
-// DELETE ACCOUNT
-// Sends email OTP always. Also sends SMS OTP if user has phone.
-// Both are required for deletion when phone is registered.
-// ============================================================
+// ────────────────────────────────────────────────────────────────────────────
+// Delete account
+// ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Initiates account deletion by sending OTP codes to all contact methods.
+ * An email OTP is always sent. If the account has a phone number registered,
+ * an SMS OTP is also sent — both must be verified to complete deletion.
+ *
+ * Returns `hasPhone: true` so the UI knows to show the phone OTP field.
+ * If the SMS fails we roll back the email OTP to keep them in sync.
+ */
 export async function sendDeleteOtpAction(): Promise<{
   error: string;
   success: boolean;
@@ -301,6 +384,19 @@ export async function sendDeleteOtpAction(): Promise<{
   return { error: "", success: true, hasPhone: !!user.phone };
 }
 
+/**
+ * Permanently deletes the user's account and all associated data.
+ * Requires a valid email OTP, plus a phone OTP if the account has one.
+ *
+ * Data is deleted in dependency order to avoid FK constraint violations:
+ *   InvoiceItems → Invoices → Clients → PasswordResetTokens → User
+ *
+ * After this action the session is still alive; call logoutAfterDeleteAction
+ * immediately afterwards to invalidate it.
+ *
+ * @param emailOtp  6-digit code sent to the user's email
+ * @param phoneOtp  6-digit code sent to the user's phone (required if phone is registered)
+ */
 export async function deleteAccountAction(
   emailOtp: string,
   phoneOtp?: string
@@ -340,6 +436,11 @@ export async function deleteAccountAction(
   return { error: "", success: true };
 }
 
+/**
+ * Signs the user out and redirects to /login.
+ * Must be called immediately after deleteAccountAction succeeds
+ * so the now-invalid session is cleared from the browser.
+ */
 export async function logoutAfterDeleteAction(): Promise<void> {
   await signOut({ redirectTo: "/login" });
 }

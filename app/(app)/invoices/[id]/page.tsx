@@ -1,3 +1,18 @@
+// ============================================================
+// app/(app)/invoices/[id]/page.tsx — Invoice Detail Page
+//
+// Server component that renders the full invoice view for a single invoice.
+// Layout has two columns:
+//   Left  — invoice header, From/To blocks, line items table, totals, notes
+//   Right — sticky action sidebar (InvoiceActions client component)
+//
+// Security:
+//   - notFound() for missing invoices (avoids leaking IDs)
+//   - redirect("/invoices") if the invoice belongs to a different user
+//
+// Route: /invoices/:id (protected by the (app) layout auth guard)
+// ============================================================
+
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { redirect, notFound } from "next/navigation";

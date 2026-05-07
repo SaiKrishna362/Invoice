@@ -1,3 +1,28 @@
+// ============================================================
+// app/forgot-password/page.tsx — Forgot Password Page
+//
+// Four-step password reset flow:
+//
+//   Step 1 "email"    — User enters their email; sendOtpAction sends
+//                       a 6-digit code and advances to step 2.
+//
+//   Step 2 "otp"      — User enters the 6-digit code; verifyOtpAction
+//                       validates it (consume=false) and advances to step 3.
+//                       consume=false keeps the token alive so it can be
+//                       re-used in step 3.
+//
+//   Step 3 "password" — User enters and confirms their new password;
+//                       resetPasswordWithOtpAction re-verifies the token
+//                       (consume=true) and saves the new hash.
+//
+//   Step 4 "done"     — Success screen with a "Sign in" link.
+//
+// Note: sendOtpAction is intentionally indistinguishable between
+// existing and non-existing addresses to prevent email enumeration.
+//
+// Route: /forgot-password (public)
+// ============================================================
+
 "use client";
 
 import { useState, useTransition, useRef, useCallback } from "react";

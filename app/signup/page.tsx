@@ -1,3 +1,24 @@
+// ============================================================
+// app/signup/page.tsx — Sign Up Page
+//
+// Three-step account creation flow:
+//
+//   Step 1 "form"  — Collect name, email, optional phone, and password.
+//                    Calls sendSignupOtpAction which sends OTP(s) and
+//                    advances to the OTP step.
+//
+//   Step 2 "otp"   — Enter email verification code (and phone code if
+//                    a phone was provided). Calls createAccountWithOtpAction
+//                    which verifies both codes and creates the user record.
+//
+//   Step 3 "done"  — Success screen with a "Sign in" button.
+//
+// Both verification codes are entered on the same screen so the user
+// sees a single verification step regardless of how many channels they used.
+//
+// Route: /signup (public)
+// ============================================================
+
 "use client";
 
 import { useState, useTransition } from "react";

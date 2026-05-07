@@ -1,19 +1,40 @@
+// ============================================================
+// app/actions/auth.ts — Authentication Server Actions
+//
+// All functions here run on the server ("use server").
+// They are called directly from client components via
+// React's useActionState / useTransition.
+//
+// Actions:
+//   loginAction               — sign in with email + password
+//   logoutAction              — sign out and redirect to /login
+//   sendOtpAction             — send forgot-password OTP email
+//   verifyOtpAction           — verify OTP without consuming it (step 2 of 3)
+//   resetPasswordWithOtpAction — verify + consume OTP, then update password (step 3 of 3)
+//   sendSignupOtpAction       — send OTP(s) before new account creation
+//   createAccountWithOtpAction — verify OTP(s) and create the user record
+// ============================================================
+
 "use server";
 
 import { signIn, signOut } from "@/auth";
-import { AuthError } from "next-auth";
-import { db } from "@/lib/db";
-import bcrypt from "bcryptjs";
-import crypto from "node:crypto";
-import { Resend } from "resend";
+import { AuthError }       from "next-auth";
+import { db }              from "@/lib/db";
+import bcrypt              from "bcryptjs";
+import crypto              from "node:crypto";
+import { Resend }          from "resend";
 import { verifyEmailOtp, verifyPhoneOtp, isValidOtpFormat, isValidEmail } from "@/lib/otp";
 
-// Input length limits
+// Server-side input length limits — mirrors the DB column constraints
 const MAX_NAME     = 100;
 const MAX_EMAIL    = 254;
 const MAX_PASSWORD = 128;
 const MAX_PHONE    = 20;
 
+/**
+ * Escapes special HTML characters so user input is safe to embed in
+ * email HTML without enabling XSS.
+ */
 function escapeHtml(s: string) {
   return s
     .replace(/&/g, "&amp;")
@@ -23,7 +44,15 @@ function escapeHtml(s: string) {
     .replace(/'/g, "&#x27;");
 }
 
-// ---- LOGIN ----
+// ────────────────────────────────────────────────────────────────────────────
+// Login
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Authenticates the user with email and password.
+ * On success, NextAuth sets a JWT cookie and redirects to /dashboard.
+ * Returns a generic error message on failure to avoid leaking which field is wrong.
+ */
 export async function loginAction(
   _prevState: { error: string } | null,
   formData: FormData
@@ -38,34 +67,52 @@ export async function loginAction(
     if (err instanceof AuthError) {
       return { error: "Invalid email or password. Please try again." };
     }
-    throw err;
+    throw err; // Re-throw non-auth errors (network, DB, etc.)
   }
   return { error: "" };
 }
 
-// ---- LOGOUT ----
+// ────────────────────────────────────────────────────────────────────────────
+// Logout
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Signs out the current user and redirects to /login.
+ * Called by the SignOutButton component after the user confirms.
+ */
 export async function logoutAction() {
   await signOut({ redirectTo: "/login" });
 }
 
-// ---- SEND FORGOT-PASSWORD OTP ----
+// ────────────────────────────────────────────────────────────────────────────
+// Forgot password — Step 1: send OTP email
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Sends a 6-digit OTP to the given email for password reset.
+ *
+ * IMPORTANT: We always return success=true even if the email doesn't exist.
+ * This prevents account enumeration — the user cannot tell whether the
+ * address is registered just from this response.
+ */
 export async function sendOtpAction(
   email: string
 ): Promise<{ error: string; success: boolean }> {
   const normalizedEmail = email.toLowerCase().trim();
-  if (!normalizedEmail)               return { error: "Email is required.", success: false };
-  if (normalizedEmail.length > MAX_EMAIL) return { error: "Invalid email.", success: false };
-  if (!isValidEmail(normalizedEmail)) return { error: "Invalid email format.", success: false };
+  if (!normalizedEmail)                   return { error: "Email is required.",      success: false };
+  if (normalizedEmail.length > MAX_EMAIL) return { error: "Invalid email.",          success: false };
+  if (!isValidEmail(normalizedEmail))     return { error: "Invalid email format.",   success: false };
 
   const user = await db.user.findUnique({ where: { email: normalizedEmail } });
 
-  // Don't reveal whether the email exists
+  // Silently succeed for unknown addresses — prevents email enumeration
   if (!user) return { error: "", success: true };
 
+  // Delete any existing OTP for this email before creating a fresh one
   await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
 
-  const otp       = crypto.randomInt(100000, 1000000).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const otp       = crypto.randomInt(100000, 1000000).toString(); // Cryptographically secure 6-digit code
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);        // Valid for 10 minutes
   await db.passwordResetToken.create({ data: { email: normalizedEmail, token: otp, expiresAt } });
 
   try {
@@ -116,7 +163,15 @@ export async function sendOtpAction(
   return { error: "", success: true };
 }
 
-// ---- VERIFY FORGOT-PASSWORD OTP (non-consuming — step 2 of 3) ----
+// ────────────────────────────────────────────────────────────────────────────
+// Forgot password — Step 2: verify OTP (non-consuming)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Checks the submitted OTP without deleting it.
+ * This lets the user advance to the "new password" step without consuming the
+ * token — the final step (resetPasswordWithOtpAction) will consume it.
+ */
 export async function verifyOtpAction(
   email: string,
   otp: string
@@ -124,12 +179,20 @@ export async function verifyOtpAction(
   const normalizedEmail = email.toLowerCase().trim();
   if (!isValidOtpFormat(otp)) return { error: "Invalid code format.", success: false };
 
+  // consume=false: keep the token alive for the password-reset step
   const err = await verifyEmailOtp(normalizedEmail, otp, false);
   if (err) return { error: err, success: false };
   return { error: "", success: true };
 }
 
-// ---- RESET PASSWORD WITH OTP (consuming — step 3 of 3) ----
+// ────────────────────────────────────────────────────────────────────────────
+// Forgot password — Step 3: verify OTP (consuming) + set new password
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Final step of the forgot-password flow.
+ * Verifies the OTP (and consumes it), then hashes and saves the new password.
+ */
 export async function resetPasswordWithOtpAction(
   email: string,
   otp: string,
@@ -137,10 +200,11 @@ export async function resetPasswordWithOtpAction(
 ): Promise<{ error: string; success: boolean }> {
   const normalizedEmail = email.toLowerCase().trim();
 
-  if (!isValidOtpFormat(otp))    return { error: "Invalid code format.", success: false };
-  if (newPassword.length < 8)    return { error: "Password must be at least 8 characters.", success: false };
-  if (newPassword.length > MAX_PASSWORD) return { error: "Password is too long.", success: false };
+  if (!isValidOtpFormat(otp))         return { error: "Invalid code format.",               success: false };
+  if (newPassword.length < 8)         return { error: "Password must be at least 8 characters.", success: false };
+  if (newPassword.length > MAX_PASSWORD) return { error: "Password is too long.",            success: false };
 
+  // consume=true: delete the token so it cannot be reused
   const err = await verifyEmailOtp(normalizedEmail, otp, true);
   if (err) return { error: err, success: false };
 
@@ -150,8 +214,18 @@ export async function resetPasswordWithOtpAction(
   return { error: "", success: true };
 }
 
-// ---- SEND SIGNUP OTP ----
-// Sends email OTP always. Also sends SMS OTP if phone is provided.
+// ────────────────────────────────────────────────────────────────────────────
+// Signup — Step 1: send OTP(s) to verify email (and optionally phone)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Sends verification codes before creating a new account:
+ *   - Always sends an OTP to the provided email
+ *   - If a phone number is given, also sends an OTP via SMS
+ *
+ * Both codes must be verified in createAccountWithOtpAction before
+ * the account is actually created.
+ */
 export async function sendSignupOtpAction(
   email: string,
   phone?: string
@@ -159,13 +233,15 @@ export async function sendSignupOtpAction(
   const { sendSmsOtp, normalizePhone, isValidPhone } = await import("@/lib/sms");
 
   const normalizedEmail = email.toLowerCase().trim();
-  if (!normalizedEmail)               return { error: "Email is required.", success: false };
-  if (normalizedEmail.length > MAX_EMAIL) return { error: "Invalid email.", success: false };
-  if (!isValidEmail(normalizedEmail)) return { error: "Invalid email format.", success: false };
+  if (!normalizedEmail)                   return { error: "Email is required.",    success: false };
+  if (normalizedEmail.length > MAX_EMAIL) return { error: "Invalid email.",        success: false };
+  if (!isValidEmail(normalizedEmail))     return { error: "Invalid email format.", success: false };
 
+  // Reject if an account with this email already exists
   const existing = await db.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) return { error: "An account with this email already exists.", success: false };
 
+  // Validate phone if provided
   let normalizedPhone: string | undefined;
   if (phone?.trim()) {
     normalizedPhone = normalizePhone(phone);
@@ -174,7 +250,8 @@ export async function sendSignupOtpAction(
       return { error: "Phone must be in E.164 format, e.g. +919876543210.", success: false };
   }
 
-  // ---- Email OTP ----
+  // ── Email OTP ────────────────────────────────────────────────────────
+  // Clear any previous signup OTP for this address first
   await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
   const emailOtp  = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -224,7 +301,7 @@ export async function sendSignupOtpAction(
     return { error: "Failed to send verification email. Please try again.", success: false };
   }
 
-  // ---- Phone OTP (only if phone was provided) ----
+  // ── Phone OTP (only when a phone number was provided) ─────────────────
   if (normalizedPhone) {
     await db.phoneOtp.deleteMany({ where: { phone: normalizedPhone } });
     const phoneOtp = crypto.randomInt(100000, 1000000).toString();
@@ -232,6 +309,7 @@ export async function sendSignupOtpAction(
 
     const smsErr = await sendSmsOtp(normalizedPhone, phoneOtp);
     if (smsErr) {
+      // SMS failed — roll back the email OTP so the user can retry cleanly
       await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
       return { error: smsErr, success: false };
     }
@@ -240,13 +318,21 @@ export async function sendSignupOtpAction(
   return { error: "", success: true };
 }
 
-// ---- CREATE ACCOUNT WITH OTP ----
+// ────────────────────────────────────────────────────────────────────────────
+// Signup — Step 2: verify OTP(s) and create the user account
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Called after the user fills in the OTP boxes on the signup page.
+ * Verifies email OTP (and phone OTP if applicable), then creates the
+ * user record. Both OTPs are consumed (deleted) on success.
+ */
 export async function createAccountWithOtpAction(
-  name: string,
-  email: string,
-  password: string,
-  emailOtp: string,
-  phone?: string,
+  name:      string,
+  email:     string,
+  password:  string,
+  emailOtp:  string,
+  phone?:    string,
   phoneOtp?: string
 ): Promise<{ error: string; success: boolean }> {
   const { normalizePhone, isValidPhone } = await import("@/lib/sms");
@@ -254,12 +340,13 @@ export async function createAccountWithOtpAction(
   const normalizedEmail = email.toLowerCase().trim();
   const trimmedName     = name.trim();
 
-  if (!trimmedName)                return { error: "Name is required.", success: false };
-  if (trimmedName.length > MAX_NAME)   return { error: "Name is too long.", success: false };
-  if (!isValidEmail(normalizedEmail))  return { error: "Invalid email format.", success: false };
-  if (password.length < 8)         return { error: "Password must be at least 8 characters.", success: false };
-  if (password.length > MAX_PASSWORD)  return { error: "Password is too long.", success: false };
-  if (!isValidOtpFormat(emailOtp)) return { error: "Invalid email code format.", success: false };
+  // Server-side validation (mirrors the client-side checks)
+  if (!trimmedName)                       return { error: "Name is required.",                    success: false };
+  if (trimmedName.length > MAX_NAME)      return { error: "Name is too long.",                    success: false };
+  if (!isValidEmail(normalizedEmail))     return { error: "Invalid email format.",                success: false };
+  if (password.length < 8)               return { error: "Password must be at least 8 characters.", success: false };
+  if (password.length > MAX_PASSWORD)    return { error: "Password is too long.",                 success: false };
+  if (!isValidOtpFormat(emailOtp))       return { error: "Invalid email code format.",            success: false };
 
   let normalizedPhone: string | undefined;
   if (phone?.trim()) {
@@ -270,19 +357,21 @@ export async function createAccountWithOtpAction(
       return { error: "Invalid phone code format.", success: false };
   }
 
+  // Race-condition guard: check again that the email is still not taken
   const existing = await db.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) return { error: "An account with this email already exists.", success: false };
 
-  // Verify email OTP (consuming)
+  // Verify and consume the email OTP
   const emailErr = await verifyEmailOtp(normalizedEmail, emailOtp, true);
   if (emailErr) return { error: emailErr, success: false };
 
-  // Verify phone OTP if phone was provided
+  // Verify and consume the phone OTP (if phone was provided during signup)
   if (normalizedPhone && phoneOtp) {
     const phoneErr = await verifyPhoneOtp(normalizedPhone, phoneOtp);
     if (phoneErr) return { error: phoneErr, success: false };
   }
 
+  // All checks passed — hash password and create the account
   const hashed = await bcrypt.hash(password, 10);
   await db.user.create({
     data: {

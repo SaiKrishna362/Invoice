@@ -1,3 +1,20 @@
+// ============================================================
+// app/(app)/clients/ClientsManager.tsx — Client List + CRUD UI
+//
+// Client component that renders the full clients page UI:
+//   - Header with "+ Add Client" button
+//   - Scrollable list of clients (name, email, GSTIN)
+//   - "Add Client" modal with a shared ClientForm
+//   - "Edit Client" modal with pre-filled ClientForm
+//   - "Delete" confirm modal (with inline error if client has invoices)
+//
+// All mutations go through server actions (createClientAction,
+// updateClientAction, deleteClientAction) via useActionState.
+// The parent page (page.tsx) fetches the initial list server-side
+// and passes it as `initialClients`; updates trigger Next.js cache
+// revalidation so the list refreshes after every mutation.
+// ============================================================
+
 "use client";
 
 import { useActionState, useEffect, useState, useTransition } from "react";
@@ -18,6 +35,11 @@ interface Client {
 
 const EMPTY_FORM = { name: "", email: "", phone: "", gstin: "", address: "" };
 
+/**
+ * Reusable form used for both "Add" and "Edit" client modals.
+ * Receives its server action, pending state, and default values from the parent.
+ * A hidden `id` input is included when editing an existing client.
+ */
 function ClientForm({
   action,
   state,
@@ -127,6 +149,17 @@ function ClientForm({
   );
 }
 
+/**
+ * Main client management component.
+ * Receives the server-rendered client list and manages all modal state locally.
+ *
+ * Modal state:
+ *   null      — no modal open
+ *   "add"     — add-client modal
+ *   Client    — edit-client modal for that specific client
+ *
+ * @param initialClients  List of the user's clients fetched server-side in page.tsx
+ */
 export function ClientsManager({ initialClients }: { initialClients: Client[] }) {
   const [modal, setModal] = useState<null | "add" | Client>(null);
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);

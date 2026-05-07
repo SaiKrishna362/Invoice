@@ -1,3 +1,23 @@
+// ============================================================
+// app/(app)/profile/ProfileForm.tsx — Profile Settings UI
+//
+// Client component for the full /profile page. Composed of:
+//
+//   ContactChangeSection  — Reusable two-step widget (input new value → enter OTP)
+//                           used for both Email Address and Mobile Number changes.
+//
+//   ProfileForm           — Main form with:
+//     • Avatar + identity card
+//     • Edit Details section (name, GSTIN, address) — simple save
+//     • Email Address change (ContactChangeSection)
+//     • Mobile Number change / add / remove (ContactChangeSection)
+//     • Danger Zone: delete account (3-step: confirm → send OTPs → verify + delete)
+//
+// All mutations go through server actions in app/actions/profile.ts.
+// Email and phone changes are OTP-verified in the server actions.
+// Account deletion requires both email AND phone OTP when phone is set.
+// ============================================================
+
 "use client";
 
 import { useActionState, useEffect, useState, useTransition } from "react";
@@ -23,9 +43,24 @@ interface User {
   createdAt: Date;
 }
 
-// ---- Inline section for changing a contact detail with OTP ----
+// ────────────────────────────────────────────────────────────────────────────
+// ContactChangeSection — reusable OTP-verified change widget
+// ────────────────────────────────────────────────────────────────────────────
+
 type ContactStep = "idle" | "inputValue" | "inputOtp" | "done";
 
+/**
+ * Two-step change widget for email or phone:
+ *   idle       → shows current value + "Change" / "Add" / "Remove" buttons
+ *   inputValue → text input for the new value + "Send Code" button
+ *   inputOtp   → OtpInput for the verification code + "Verify & Update" button
+ *   done       → green success banner (auto-reverts to idle after 4 s)
+ *
+ * @param onSendOtp  Called with the new value to trigger the OTP delivery
+ * @param onVerify   Called with (value, otp) to commit the change
+ * @param onResend   Called to resend the OTP to the same value
+ * @param onRemove   Optional — shown when currentValue is set (phone remove button)
+ */
 function ContactChangeSection({
   label,
   currentValue,
@@ -212,9 +247,18 @@ function ContactChangeSection({
   );
 }
 
-// ============================================================
-// Main ProfileForm
-// ============================================================
+// ────────────────────────────────────────────────────────────────────────────
+// ProfileForm — main page component
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Main profile settings form.
+ * Holds optimistic local user state that is updated immediately after
+ * email / phone changes succeed so the UI reflects the new value without
+ * needing a full page reload.
+ *
+ * @param user  Current user data fetched server-side in page.tsx
+ */
 export function ProfileForm({ user: initialUser }: { user: User }) {
   const [user, setUser] = useState(initialUser);
 

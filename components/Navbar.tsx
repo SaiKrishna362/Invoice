@@ -1,3 +1,15 @@
+// ============================================================
+// components/Navbar.tsx — Top Navigation Bar
+//
+// Server component rendered by app/(app)/layout.tsx.
+// Renders two layouts using Tailwind responsive classes:
+//   Desktop (md+) — logo | nav links | user name link + sign-out
+//   Mobile (<md)  — logo | hamburger → MobileMenu (client component)
+//
+// NAV_LINKS defines the shared navigation items used by both
+// the desktop nav and the MobileMenu dropdown.
+// ============================================================
+
 import Link from "next/link";
 import { SignOutButton } from "./SignOutButton";
 import { MobileMenu } from "./MobileMenu";
@@ -8,6 +20,12 @@ const NAV_LINKS = [
   { href: "/clients",   label: "Clients"   },
 ];
 
+/**
+ * Top navigation bar shown on all authenticated pages.
+ *
+ * @param userName  The logged-in user's name, shown as a link to /profile.
+ *                  Falls back to "Profile" if not yet loaded.
+ */
 export function Navbar({ userName }: { userName?: string | null }) {
   return (
     <nav className="relative bg-white border-b border-[#e0ddd6] px-5 py-3 flex items-center">

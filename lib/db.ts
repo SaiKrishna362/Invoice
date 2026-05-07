@@ -42,3 +42,8 @@ export const db = globalThis.prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== "production") {
   globalThis.prisma = db;
 }
+
+// Gracefully close the connection pool when the process shuts down.
+// Covers Ctrl+C (SIGINT) and container/process-manager stop (SIGTERM).
+process.on("SIGINT",  () => db.$disconnect().finally(() => process.exit(0)));
+process.on("SIGTERM", () => db.$disconnect().finally(() => process.exit(0)));

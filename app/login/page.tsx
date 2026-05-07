@@ -164,7 +164,7 @@ export default function LoginPage() {
             <p className="text-sm text-[#6b6b6b]">Don&apos;t have an account?</p>
             <NavLink
               href="/signup"
-              className="inline-block mt-2 w-full text-center border border-[#1a6b4a] text-[#1a6b4a]
+              className="mt-2 w-full justify-center border border-[#1a6b4a] text-[#1a6b4a]
                          text-sm font-semibold py-2.5 rounded-lg hover:bg-[#e8f5ee] transition-colors"
             >
               Create one free

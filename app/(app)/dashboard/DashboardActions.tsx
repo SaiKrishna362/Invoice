@@ -22,11 +22,12 @@ export function DashboardNewButton() {
   return (
     <NavLink
       href="/invoices/new"
-      className="bg-[#1a6b4a] text-white text-sm font-medium px-5 py-2.5 rounded-lg
-                 hover:bg-[#2d9b6f] transition-colors"
+      className="bg-[#1a6b4a] text-white text-sm font-medium px-4 py-2.5 rounded-lg
+                 hover:bg-[#2d9b6f] transition-colors shrink-0 whitespace-nowrap"
       spinnerClassName="w-4 h-4"
     >
-      + New Invoice
+      <span className="hidden sm:inline">+ New Invoice</span>
+      <span className="sm:hidden">+ New</span>
     </NavLink>
   );
 }

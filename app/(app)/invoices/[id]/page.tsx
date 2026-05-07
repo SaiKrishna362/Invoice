@@ -51,8 +51,20 @@ export default async function InvoiceDetailPage({
 
       <div className="flex flex-col lg:flex-row gap-5">
 
+        {/* Action sidebar — rendered first in DOM so it appears at top on mobile */}
+        <div className="lg:w-60 shrink-0 order-first lg:order-last">
+          <div className="bg-white border border-[#e0ddd6] rounded-2xl p-5 lg:sticky lg:top-6">
+            <p className="text-sm font-semibold text-[#1a1a1a] mb-4">Actions</p>
+            <InvoiceActions
+              invoiceId={invoice.id}
+              status={invoice.status}
+              clientEmail={invoice.client.email}
+            />
+          </div>
+        </div>
+
         {/* Main invoice view */}
-        <div className="flex-1 space-y-4 min-w-0">
+        <div className="flex-1 space-y-4 min-w-0 order-last lg:order-first">
 
           {/* Header card */}
           <div className="bg-white border border-[#e0ddd6] rounded-2xl p-5 sm:p-6">
@@ -147,18 +159,6 @@ export default async function InvoiceDetailPage({
               <p className="text-sm text-[#6b6b6b] whitespace-pre-line">{invoice.notes}</p>
             </div>
           )}
-        </div>
-
-        {/* Action sidebar */}
-        <div className="lg:w-60 shrink-0">
-          <div className="bg-white border border-[#e0ddd6] rounded-2xl p-5 lg:sticky lg:top-6">
-            <p className="text-sm font-semibold text-[#1a1a1a] mb-4">Actions</p>
-            <InvoiceActions
-              invoiceId={invoice.id}
-              status={invoice.status}
-              clientEmail={invoice.client.email}
-            />
-          </div>
         </div>
       </div>
     </div>

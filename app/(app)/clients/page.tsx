@@ -21,7 +21,7 @@ export default async function ClientsPage() {
   });
 
   return (
-    <div className="p-6 md:p-10 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-10 max-w-4xl mx-auto">
       <ClientsManager initialClients={clients} />
     </div>
   );

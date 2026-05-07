@@ -254,17 +254,18 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
         />
       )}
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#1a1a1a]">Clients</h1>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold text-[#1a1a1a]">Clients</h1>
           <p className="text-sm text-[#6b6b6b] mt-1">{initialClients.length} client{initialClients.length !== 1 ? "s" : ""}</p>
         </div>
         <button
           onClick={() => { setIsModalDirty(false); setModal("add"); }}
-          className="bg-[#1a6b4a] text-white text-sm font-medium px-5 py-2.5 rounded-lg
-                     hover:bg-[#2d9b6f] transition-colors"
+          className="bg-[#1a6b4a] text-white text-sm font-medium px-4 sm:px-5 py-2.5 rounded-lg
+                     hover:bg-[#2d9b6f] transition-colors shrink-0 whitespace-nowrap"
         >
-          + Add Client
+          <span className="hidden sm:inline">+ Add Client</span>
+          <span className="sm:hidden">+ Add</span>
         </button>
       </div>
 

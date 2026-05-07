@@ -8,9 +8,13 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PROTECTED.some((p) => pathname.startsWith(p))) {
+    const cookieName = process.env.NODE_ENV === "production"
+      ? "__Secure-authjs.session-token"
+      : "authjs.session-token";
     const token = await getToken({
       req: request,
       secret: process.env.NEXTAUTH_SECRET,
+      cookieName,
     });
 
     if (!token) {

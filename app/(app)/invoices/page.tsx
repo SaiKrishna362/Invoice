@@ -48,9 +48,9 @@ export default async function InvoicesPage({
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#1a1a1a]">Invoices</h1>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold text-[#1a1a1a]">Invoices</h1>
           <p className="text-sm text-[#6b6b6b] mt-1">
             {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}
           </p>

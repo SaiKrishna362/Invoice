@@ -50,9 +50,9 @@ export default async function DashboardPage() {
     <div className="p-4 sm:p-6 md:p-10">
 
       {/* ---- PAGE HEADER ---- */}
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#1a1a1a]">
+      <div className="flex items-center justify-between gap-3 mb-8">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold text-[#1a1a1a] truncate">
             Good morning, {session!.user!.name?.split(" ")[0]} 👋
           </h1>
           <p className="text-sm text-[#6b6b6b] mt-1">

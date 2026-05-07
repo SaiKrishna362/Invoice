@@ -1,34 +1,9 @@
-// ============================================================
-// components/MobileMenu.tsx — Mobile Hamburger Navigation
-//
-// Client component used by Navbar.tsx on screens narrower than `md`.
-// Renders a hamburger (☰) / close (✕) icon button that toggles a
-// full-width dropdown panel with:
-//   - The same NAV_LINKS as the desktop nav
-//   - A link to /profile showing the user's name
-//   - The SignOutButton
-//
-// The dropdown is positioned absolute below the navbar using
-// `top-full` so it overlays page content without shifting layout.
-// ============================================================
-
 "use client";
 
 import { useState } from "react";
 import { NavLink } from "./NavLink";
 import { SignOutButton } from "./SignOutButton";
 
-const NAV_LINKS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/invoices",  label: "Invoices"  },
-  { href: "/clients",   label: "Clients"   },
-];
-
-/**
- * Mobile navigation menu (hamburger button + slide-down panel).
- *
- * @param userName  Displayed as the profile link label. Falls back to "Profile".
- */
 export function MobileMenu({ userName }: { userName?: string | null }) {
   const [open, setOpen] = useState(false);
 
@@ -52,28 +27,21 @@ export function MobileMenu({ userName }: { userName?: string | null }) {
 
       {open && (
         <div className="absolute top-full left-0 right-0 bg-white border-b border-[#e0ddd6] shadow-md z-50">
-          <div className="px-4 py-3 space-y-0.5">
-            {NAV_LINKS.map(({ href, label }) => (
-              <NavLink
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className="flex px-3 py-2.5 text-sm text-[#6b6b6b] hover:text-[#1a1a1a]
-                           hover:bg-[#f5f4f0] rounded-lg transition-colors w-full"
-              >
-                {label}
-              </NavLink>
-            ))}
-            <NavLink
-              href="/profile"
-              onClick={() => setOpen(false)}
-              className="flex px-3 py-2.5 text-sm text-[#6b6b6b] hover:text-[#1a1a1a]
-                         hover:bg-[#f5f4f0] rounded-lg transition-colors w-full"
-            >
-              {userName ?? "Profile"}
-            </NavLink>
-            <div className="px-3 py-2.5 border-t border-[#e0ddd6] mt-1 pt-3">
-              <SignOutButton />
+          <div className="px-4 py-3">
+            <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
+              <div className="w-8 h-8 rounded-full bg-[#e8f5ee] flex items-center justify-center shrink-0">
+                <span className="text-[#1a6b4a] text-xs font-semibold">
+                  {(userName ?? "?")[0].toUpperCase()}
+                </span>
+              </div>
+              <span className="text-sm font-medium text-[#1a1a1a] truncate">
+                {userName ?? "Account"}
+              </span>
+            </div>
+            <div className="border-t border-[#e0ddd6] pt-2">
+              <div className="px-3 py-1">
+                <SignOutButton />
+              </div>
             </div>
           </div>
         </div>

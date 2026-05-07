@@ -21,13 +21,18 @@ type StatusFilter = typeof STATUSES[number];
 /** "Import" and "+ New" action buttons in the invoice list header. */
 export function InvoiceListHeader() {
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-2 shrink-0">
       <NavLink
         href="/invoices/import"
-        className="border border-[#e0ddd6] text-[#6b6b6b] text-sm font-medium px-4 py-2.5 rounded-lg
-                   hover:bg-[#f5f4f0] transition-colors whitespace-nowrap"
+        className="border border-[#e0ddd6] text-[#6b6b6b] text-sm font-medium px-3 sm:px-4 py-2.5 rounded-lg
+                   hover:bg-[#f5f4f0] transition-colors"
       >
-        Import
+        {/* Upload icon on mobile, text on sm+ */}
+        <svg className="w-4 h-4 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round"
+            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+        </svg>
+        <span className="hidden sm:inline">Import</span>
       </NavLink>
       <NavLink
         href="/invoices/new"

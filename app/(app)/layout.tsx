@@ -17,6 +17,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
+import { BottomNav } from "@/components/BottomNav";
 
 export default async function AppLayout({
   children,
@@ -29,7 +30,10 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen bg-[#f5f4f0]">
       <Navbar userName={session.user.name} />
-      {children}
+      <div className="pb-16 md:pb-0">
+        {children}
+      </div>
+      <BottomNav />
     </div>
   );
 }

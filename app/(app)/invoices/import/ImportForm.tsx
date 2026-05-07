@@ -24,13 +24,13 @@
 
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import Link from "next/link";
+import { useRef, useState, useTransition, useEffect } from "react";
+import { NavLink } from "@/components/NavLink";
 import { parseInvoiceFileAction, createImportedInvoicesAction } from "@/app/actions/import";
 import { ParsedInvoice, ParsedItem } from "@/lib/invoice-parser";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
-import { Spinner } from "@/components/Spinner";
+import { useNavigation } from "@/components/NavigationProgress";
 
 type Step = "upload" | "preview" | "importing" | "done";
 
@@ -45,6 +45,8 @@ export default function ImportForm() {
   const [step, setStep]             = useState<Step>("upload");
   const [isPending, startTransition] = useTransition();
   const [dragOver, setDragOver]     = useState(false);
+  const { setNavigating } = useNavigation();
+  useEffect(() => { if (!isPending) setNavigating(false); }, [isPending]);
 
   // Dirty when there are parsed invoices the user hasn't committed or discarded yet.
   const isDirty = step === "preview" || step === "importing";
@@ -94,6 +96,7 @@ export default function ImportForm() {
     const fd = new FormData();
     fd.append("file", file);
 
+    setNavigating(true);
     startTransition(async () => {
       const res = await parseInvoiceFileAction(fd);
       if (res.error) { setUploadError(res.error); return; }
@@ -156,6 +159,7 @@ export default function ImportForm() {
 
   function handleImport() {
     setImportError("");
+    setNavigating(true);
     startTransition(async () => {
       setStep("importing");
       const res = await createImportedInvoicesAction(invoices);
@@ -207,23 +211,24 @@ export default function ImportForm() {
 
         <div className="flex flex-col gap-2 mb-6 max-h-48 overflow-y-auto">
           {created.map(c => (
-            <Link
+            <NavLink
               key={c.invoiceId}
               href={`/invoices/${c.invoiceId}`}
               className="text-sm text-[#2d9b6f] hover:underline"
             >
               {c.invoiceNo} →
-            </Link>
+            </NavLink>
           ))}
         </div>
 
         <div className="flex gap-3 justify-center">
-          <Link
+          <NavLink
             href="/invoices"
             className="px-5 py-2.5 bg-[#1a6b4a] text-white text-sm font-medium rounded-lg hover:bg-[#2d9b6f] transition-colors"
+            spinnerClassName="w-4 h-4"
           >
             View all invoices
-          </Link>
+          </NavLink>
           <button
             onClick={reset}
             className="px-5 py-2.5 border border-[#e0ddd6] text-sm font-medium rounded-lg text-[#6b6b6b] hover:bg-[#f5f4f0] transition-colors"
@@ -296,10 +301,8 @@ export default function ImportForm() {
                 onClick={handleImport}
                 disabled={step === "importing"}
                 className="flex-1 sm:flex-none px-6 py-2.5 bg-[#1a6b4a] text-white text-sm font-medium
-                           rounded-lg hover:bg-[#2d9b6f] disabled:opacity-60 transition-colors
-                           flex items-center justify-center gap-2"
+                           rounded-lg hover:bg-[#2d9b6f] disabled:opacity-60 transition-colors"
               >
-                {step === "importing" && <Spinner />}
                 {step === "importing" ? "Importing…" : `Import ${total} invoice${total !== 1 ? "s" : ""}`}
               </button>
               <button
@@ -348,10 +351,7 @@ export default function ImportForm() {
         </div>
 
         {isPending ? (
-          <div className="flex items-center justify-center gap-2 text-sm text-[#6b6b6b]">
-            <Spinner className="w-5 h-5" />
-            Reading file…
-          </div>
+          <div className="text-sm text-[#6b6b6b]">Reading file…</div>
         ) : (
           <>
             <p className="text-sm font-medium text-[#1a1a1a]">Drop your file here or click to browse</p>

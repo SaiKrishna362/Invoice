@@ -90,10 +90,7 @@ export async function logoutAction() {
 
 /**
  * Sends a 6-digit OTP to the given email for password reset.
- *
- * IMPORTANT: We always return success=true even if the email doesn't exist.
- * This prevents account enumeration — the user cannot tell whether the
- * address is registered just from this response.
+ * Returns an error if no account exists with the given email.
  */
 export async function sendOtpAction(
   email: string
@@ -105,8 +102,7 @@ export async function sendOtpAction(
 
   const user = await db.user.findUnique({ where: { email: normalizedEmail } });
 
-  // Silently succeed for unknown addresses — prevents email enumeration
-  if (!user) return { error: "", success: true };
+  if (!user) return { error: "No account found with this email address.", success: false };
 
   // Delete any existing OTP for this email before creating a fresh one
   await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });

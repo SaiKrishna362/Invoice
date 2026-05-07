@@ -24,7 +24,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import { OtpInput, EMPTY_OTP } from "@/components/OtpInput";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
-import { Spinner } from "@/components/Spinner";
+import { useNavigation } from "@/components/NavigationProgress";
 import {
   updateProfileAction,
   sendEmailChangeOtpAction,
@@ -90,10 +90,13 @@ function ContactChangeSection({
   const [otp,     setOtp]     = useState<string[]>(EMPTY_OTP());
   const [errMsg,  setErrMsg]  = useState("");
   const [pending, start]      = useTransition();
+  const { setNavigating } = useNavigation();
+  useEffect(() => { if (!pending) setNavigating(false); }, [pending]);
 
   function handleSend(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrMsg("");
+    setNavigating(true);
     start(async () => {
       const res = await onSendOtp(value);
       if (res.error) { setErrMsg(res.error); return; }
@@ -107,6 +110,7 @@ function ContactChangeSection({
     setErrMsg("");
     const code = otp.join("");
     if (code.length < 6) { setErrMsg("Please enter the full 6-digit code."); return; }
+    setNavigating(true);
     start(async () => {
       const res = await onVerify(value, code);
       if (res.error) { setErrMsg(res.error); return; }
@@ -118,6 +122,7 @@ function ContactChangeSection({
   function handleResend() {
     setErrMsg("");
     setOtp(EMPTY_OTP());
+    setNavigating(true);
     start(async () => {
       const res = await onResend(value);
       if (res.error) setErrMsg(res.error);
@@ -198,10 +203,8 @@ function ContactChangeSection({
                   type="submit"
                   disabled={pending}
                   className="flex-1 bg-[#1a6b4a] text-white text-sm py-2.5 rounded-lg
-                             hover:bg-[#2d9b6f] transition-colors disabled:opacity-60
-                             flex items-center justify-center gap-2"
+                             hover:bg-[#2d9b6f] transition-colors disabled:opacity-60"
                 >
-                  {pending && <Spinner />}
                   {pending ? "Sending…" : "Send Code"}
                 </button>
               </div>
@@ -228,10 +231,8 @@ function ContactChangeSection({
                     type="submit"
                     disabled={pending || otp.join("").length < 6}
                     className="flex-1 bg-[#1a6b4a] text-white text-sm py-2.5 rounded-lg
-                               hover:bg-[#2d9b6f] transition-colors disabled:opacity-60
-                               flex items-center justify-center gap-2"
+                               hover:bg-[#2d9b6f] transition-colors disabled:opacity-60"
                   >
-                    {pending && <Spinner />}
                     {pending ? "Verifying…" : "Verify & Update"}
                   </button>
                 </div>
@@ -241,10 +242,8 @@ function ContactChangeSection({
                 <button
                   onClick={handleResend}
                   disabled={pending}
-                  className="text-sm text-[#2d9b6f] hover:underline disabled:opacity-60
-                             inline-flex items-center gap-1.5"
+                  className="text-sm text-[#2d9b6f] hover:underline disabled:opacity-60"
                 >
-                  {pending && <Spinner className="w-3.5 h-3.5" />}
                   Resend code
                 </button>
               </div>
@@ -275,6 +274,8 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
   const [state, formAction, pending] = useActionState(updateProfileAction, null);
   const [saved, setSaved] = useState(false);
   const [isDetailsDirty, setIsDetailsDirty] = useState(false);
+  const { setNavigating } = useNavigation();
+  useEffect(() => { if (!pending) setNavigating(false); }, [pending]);
 
   const { showPrompt, proceedNavigation, cancelNavigation, clearDirty } =
     useUnsavedChanges(isDetailsDirty);
@@ -296,9 +297,11 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
   const [delPhoneOtp,   setDelPhoneOtp]   = useState<string[]>(EMPTY_OTP());
   const [deleteError,   setDeleteError]   = useState("");
   const [deletePending, startDelete]      = useTransition();
+  useEffect(() => { if (!deletePending) setNavigating(false); }, [deletePending]);
 
   function handleSendDeleteOtp() {
     setDeleteError("");
+    setNavigating(true);
     startDelete(async () => {
       const res = await sendDeleteOtpAction();
       if (res.error) { setDeleteError(res.error); return; }
@@ -316,6 +319,7 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
     const phoneCode = delPhoneOtp.join("");
     if (emailCode.length < 6) { setDeleteError("Please enter the full email confirmation code."); return; }
     if (deleteHasPhone && phoneCode.length < 6) { setDeleteError("Please enter the full phone confirmation code."); return; }
+    setNavigating(true);
     startDelete(async () => {
       const res = await deleteAccountAction(
         emailCode,
@@ -385,7 +389,7 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
           </div>
         )}
 
-        <form action={formAction} className="space-y-5" onInput={() => setIsDetailsDirty(true)}>
+        <form action={formAction} onSubmit={() => setNavigating(true)} className="space-y-5" onInput={() => setIsDetailsDirty(true)}>
           <div>
             <label className="block text-sm font-medium text-[#1a1a1a] mb-1.5">Full name *</label>
             <input
@@ -431,10 +435,8 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
             type="submit"
             disabled={pending}
             className="bg-[#1a6b4a] text-white px-6 py-2.5 rounded-lg text-sm font-medium
-                       hover:bg-[#2d9b6f] transition-colors disabled:opacity-60
-                       flex items-center gap-2"
+                       hover:bg-[#2d9b6f] transition-colors disabled:opacity-60"
           >
-            {pending && <Spinner />}
             {pending ? "Saving…" : "Save changes"}
           </button>
         </form>
@@ -521,10 +523,8 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
                 onClick={handleSendDeleteOtp}
                 disabled={deletePending}
                 className="flex-1 bg-red-600 text-white text-sm py-2.5 rounded-lg
-                           hover:bg-red-700 transition-colors disabled:opacity-60
-                           flex items-center justify-center gap-2"
+                           hover:bg-red-700 transition-colors disabled:opacity-60"
               >
-                {deletePending && <Spinner />}
                 {deletePending ? "Sending…" : "Send confirmation code"}
               </button>
             </div>
@@ -568,10 +568,8 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
                   (deleteHasPhone && delPhoneOtp.join("").length < 6)
                 }
                 className="flex-1 bg-red-600 text-white text-sm py-2.5 rounded-lg
-                           hover:bg-red-700 transition-colors disabled:opacity-60 font-medium
-                           flex items-center justify-center gap-2"
+                           hover:bg-red-700 transition-colors disabled:opacity-60 font-medium"
               >
-                {deletePending && <Spinner />}
                 {deletePending ? "Deleting…" : "Yes, delete everything"}
               </button>
             </div>
@@ -581,10 +579,8 @@ export function ProfileForm({ user: initialUser }: { user: User }) {
                 type="button"
                 onClick={() => { setDeleteStep("confirm"); setDeleteError(""); setDelEmailOtp(EMPTY_OTP()); setDelPhoneOtp(EMPTY_OTP()); }}
                 disabled={deletePending}
-                className="text-sm text-red-500 hover:underline disabled:opacity-60
-                           inline-flex items-center gap-1.5"
+                className="text-sm text-red-500 hover:underline disabled:opacity-60"
               >
-                {deletePending && <Spinner className="w-3.5 h-3.5" />}
                 Resend codes
               </button>
             </div>

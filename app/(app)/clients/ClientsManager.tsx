@@ -26,6 +26,7 @@ import {
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
 import { Spinner } from "@/components/Spinner";
+import { useNavigation } from "@/components/NavigationProgress";
 
 interface Client {
   id: string;
@@ -52,6 +53,7 @@ function ClientForm({
   submitLabel,
   onCancel,
   onDirty,
+  onBeforeSubmit,
 }: {
   action: (payload: FormData) => void;
   state: { error: string; success: boolean } | null;
@@ -61,9 +63,10 @@ function ClientForm({
   submitLabel: string;
   onCancel: () => void;
   onDirty?: () => void;
+  onBeforeSubmit?: () => void;
 }) {
   return (
-    <form action={action} className="space-y-4" onInput={onDirty}>
+    <form action={action} onSubmit={onBeforeSubmit} className="space-y-4" onInput={onDirty}>
       {hiddenId && <input type="hidden" name="id" value={hiddenId} />}
 
       {state?.error && (
@@ -145,10 +148,8 @@ function ClientForm({
           type="submit"
           disabled={pending}
           className="flex-1 bg-[#1a6b4a] text-white text-sm py-2.5 rounded-lg
-                     hover:bg-[#2d9b6f] transition-colors disabled:opacity-60
-                     flex items-center justify-center gap-2"
+                     hover:bg-[#2d9b6f] transition-colors disabled:opacity-60"
         >
-          {pending && <Spinner />}
           {pending ? "Saving…" : submitLabel}
         </button>
       </div>
@@ -184,6 +185,9 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
   const [editState, editAction, editPending] = useActionState(updateClientAction, null);
   const [deletePending, startDelete] = useTransition();
   const [deleteError, setDeleteError] = useState("");
+  const { setNavigating } = useNavigation();
+  const anyPending = addPending || editPending || deletePending;
+  useEffect(() => { if (!anyPending) setNavigating(false); }, [anyPending]);
 
   useEffect(() => {
     if (addState?.success) {
@@ -222,6 +226,7 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
   function handleDelete() {
     if (!deleteTarget) return;
     const id = deleteTarget.id;
+    setNavigating(true);
     startDelete(async () => {
       const result = await deleteClientAction(id);
       if (result.success) {
@@ -329,6 +334,7 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
               submitLabel="Add Client"
               onCancel={requestCloseModal}
               onDirty={() => setIsModalDirty(true)}
+              onBeforeSubmit={() => setNavigating(true)}
             />
           </div>
         </div>
@@ -355,6 +361,7 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
               submitLabel="Save Changes"
               onCancel={requestCloseModal}
               onDirty={() => setIsModalDirty(true)}
+              onBeforeSubmit={() => setNavigating(true)}
             />
           </div>
         </div>
@@ -384,10 +391,8 @@ export function ClientsManager({ initialClients }: { initialClients: Client[] })
                 onClick={handleDelete}
                 disabled={deletePending}
                 className="flex-1 bg-red-500 text-white text-sm py-2.5 rounded-lg
-                           hover:bg-red-600 transition-colors disabled:opacity-50
-                           flex items-center justify-center gap-2"
+                           hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {deletePending && <Spinner />}
                 {deletePending ? "Deleting…" : "Delete"}
               </button>
             </div>

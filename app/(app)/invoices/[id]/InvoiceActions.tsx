@@ -19,13 +19,13 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import {
   updateInvoiceStatusAction,
   deleteInvoiceAction,
   sendInvoiceAction,
 } from "@/app/actions/invoice";
-import { Spinner } from "@/components/Spinner";
+import { useNavigation } from "@/components/NavigationProgress";
 
 type Status = "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 
@@ -49,11 +49,12 @@ export function InvoiceActions({
   const [sendResult, setSendResult] = useState<{ error: string; success: boolean } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const { setNavigating } = useNavigation();
+  useEffect(() => { if (!pending) setNavigating(false); }, [pending]);
 
-  // Generic transition runner — tracks which button label is active
-  // so we can show "Sending…" on one button without freezing the others.
   function run(action: string, fn: () => Promise<void> | void) {
     setActiveAction(action);
+    setNavigating(true);
     startTransition(async () => {
       await fn();
       setActiveAction(null);
@@ -110,10 +111,8 @@ export function InvoiceActions({
           onClick={handleSend}
           disabled={pending}
           className="w-full bg-[#1a6b4a] text-white text-sm py-2.5 rounded-lg
-                     hover:bg-[#2d9b6f] transition-colors font-medium disabled:opacity-60
-                     flex items-center justify-center gap-2"
+                     hover:bg-[#2d9b6f] transition-colors font-medium disabled:opacity-60"
         >
-          {isBusy("send") && <Spinner />}
           {isBusy("send") ? "Sending…" : "Send Invoice"}
         </button>
       )}
@@ -124,10 +123,8 @@ export function InvoiceActions({
           onClick={() => handleStatus("PAID")}
           disabled={pending}
           className="w-full bg-green-600 text-white text-sm py-2.5 rounded-lg
-                     hover:bg-green-700 transition-colors font-medium disabled:opacity-60
-                     flex items-center justify-center gap-2"
+                     hover:bg-green-700 transition-colors font-medium disabled:opacity-60"
         >
-          {isBusy("PAID") && <Spinner />}
           {isBusy("PAID") ? "Updating…" : "Mark as Paid"}
         </button>
       )}
@@ -137,10 +134,8 @@ export function InvoiceActions({
           onClick={() => handleStatus("SENT")}
           disabled={pending}
           className="w-full border border-[#e0ddd6] text-sm text-[#6b6b6b] py-2.5 rounded-lg
-                     hover:bg-[#f5f4f0] transition-colors disabled:opacity-60
-                     flex items-center justify-center gap-2"
+                     hover:bg-[#f5f4f0] transition-colors disabled:opacity-60"
         >
-          {isBusy("SENT") && <Spinner />}
           {isBusy("SENT") ? "Updating…" : "Mark as Sent"}
         </button>
       )}
@@ -150,10 +145,8 @@ export function InvoiceActions({
           onClick={() => handleStatus("PAID")}
           disabled={pending}
           className="w-full bg-green-600 text-white text-sm py-2.5 rounded-lg
-                     hover:bg-green-700 transition-colors font-medium disabled:opacity-60
-                     flex items-center justify-center gap-2"
+                     hover:bg-green-700 transition-colors font-medium disabled:opacity-60"
         >
-          {isBusy("PAID") && <Spinner />}
           {isBusy("PAID") ? "Updating…" : "Mark as Paid"}
         </button>
       )}
@@ -163,10 +156,8 @@ export function InvoiceActions({
           onClick={() => handleStatus("OVERDUE" === status ? "DRAFT" : "OVERDUE")}
           disabled={pending}
           className="w-full border border-[#e0ddd6] text-sm text-[#6b6b6b] py-2.5 rounded-lg
-                     hover:bg-[#f5f4f0] transition-colors disabled:opacity-60
-                     flex items-center justify-center gap-2"
+                     hover:bg-[#f5f4f0] transition-colors disabled:opacity-60"
         >
-          {(isBusy("OVERDUE") || isBusy("DRAFT")) && <Spinner />}
           {status === "DRAFT"
             ? isBusy("OVERDUE") ? "Updating…" : "Mark as Overdue"
             : isBusy("DRAFT")   ? "Updating…" : "Revert to Draft"}
@@ -206,10 +197,8 @@ export function InvoiceActions({
                 onClick={handleDelete}
                 disabled={pending}
                 className="flex-1 bg-red-500 text-white text-sm py-2.5 rounded-lg
-                           hover:bg-red-600 transition-colors disabled:opacity-50
-                           flex items-center justify-center gap-2"
+                           hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {isBusy("delete") && <Spinner />}
                 {isBusy("delete") ? "Deleting…" : "Yes, Delete"}
               </button>
             </div>

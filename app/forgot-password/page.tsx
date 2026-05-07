@@ -25,13 +25,14 @@
 
 "use client";
 
-import { useState, useTransition, useRef, useCallback } from "react";
+import { useState, useTransition, useRef, useCallback, useEffect } from "react";
 import {
   sendOtpAction,
   verifyOtpAction,
   resetPasswordWithOtpAction,
 } from "@/app/actions/auth";
-import Link from "next/link";
+import { NavLink } from "@/components/NavLink";
+import { useNavigation } from "@/components/NavigationProgress";
 
 type Step = "email" | "otp" | "password" | "done";
 
@@ -41,6 +42,8 @@ export default function ForgotPasswordPage() {
   const [otp, setOtp]         = useState(["", "", "", "", "", ""]);
   const [error, setError]     = useState("");
   const [isPending, start]    = useTransition();
+  const { setNavigating } = useNavigation();
+  useEffect(() => { if (!isPending) setNavigating(false); }, [isPending]);
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -49,6 +52,7 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setError("");
     const val = (new FormData(e.currentTarget).get("email") as string).toLowerCase().trim();
+    setNavigating(true);
     start(async () => {
       const res = await sendOtpAction(val);
       if (res.error) { setError(res.error); return; }
@@ -92,6 +96,7 @@ export default function ForgotPasswordPage() {
     setError("");
     const code = otp.join("");
     if (code.length < 6) { setError("Please enter the full 6-digit code."); return; }
+    setNavigating(true);
     start(async () => {
       const res = await verifyOtpAction(email, code);
       if (res.error) { setError(res.error); return; }
@@ -102,6 +107,7 @@ export default function ForgotPasswordPage() {
   function handleResend() {
     setError("");
     setOtp(["", "", "", "", "", ""]);
+    setNavigating(true);
     start(async () => {
       const res = await sendOtpAction(email);
       if (res.error) setError(res.error);
@@ -119,6 +125,7 @@ export default function ForgotPasswordPage() {
     if (newPassword !== confirmPassword) { setError("Passwords don't match."); return; }
     if (newPassword.length < 8)          { setError("Password must be at least 8 characters."); return; }
     const code = otp.join("");
+    setNavigating(true);
     start(async () => {
       const res = await resetPasswordWithOtpAction(email, code, newPassword);
       if (res.error) { setError(res.error); return; }
@@ -184,9 +191,9 @@ export default function ForgotPasswordPage() {
                 </button>
               </form>
               <p className="text-center text-sm text-[#6b6b6b] mt-6">
-                <Link href="/login" className="text-[#2d9b6f] font-medium hover:underline">
+                <NavLink href="/login" className="text-[#2d9b6f] font-medium hover:underline">
                   Back to sign in
-                </Link>
+                </NavLink>
               </p>
             </>
           )}
@@ -311,13 +318,13 @@ export default function ForgotPasswordPage() {
               </div>
               <p className="text-sm font-medium text-[#1a1a1a] mb-1">Password updated!</p>
               <p className="text-sm text-[#6b6b6b] mb-6">You can now sign in with your new password.</p>
-              <Link
+              <NavLink
                 href="/login"
                 className="inline-block bg-[#1a6b4a] text-white text-sm font-medium px-6 py-2.5
                            rounded-lg hover:bg-[#2d9b6f] transition-colors"
               >
                 Sign in
-              </Link>
+              </NavLink>
             </div>
           )}
 

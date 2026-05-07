@@ -15,7 +15,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { NavLink } from "./NavLink";
 import { SignOutButton } from "./SignOutButton";
 
 const NAV_LINKS = [
@@ -54,24 +54,24 @@ export function MobileMenu({ userName }: { userName?: string | null }) {
         <div className="absolute top-full left-0 right-0 bg-white border-b border-[#e0ddd6] shadow-md z-50">
           <div className="px-4 py-3 space-y-0.5">
             {NAV_LINKS.map(({ href, label }) => (
-              <Link
+              <NavLink
                 key={href}
                 href={href}
                 onClick={() => setOpen(false)}
-                className="flex items-center px-3 py-2.5 text-sm text-[#6b6b6b] hover:text-[#1a1a1a]
-                           hover:bg-[#f5f4f0] rounded-lg transition-colors"
+                className="flex px-3 py-2.5 text-sm text-[#6b6b6b] hover:text-[#1a1a1a]
+                           hover:bg-[#f5f4f0] rounded-lg transition-colors w-full"
               >
                 {label}
-              </Link>
+              </NavLink>
             ))}
-            <Link
+            <NavLink
               href="/profile"
               onClick={() => setOpen(false)}
-              className="flex items-center px-3 py-2.5 text-sm text-[#6b6b6b] hover:text-[#1a1a1a]
-                         hover:bg-[#f5f4f0] rounded-lg transition-colors"
+              className="flex px-3 py-2.5 text-sm text-[#6b6b6b] hover:text-[#1a1a1a]
+                         hover:bg-[#f5f4f0] rounded-lg transition-colors w-full"
             >
               {userName ?? "Profile"}
-            </Link>
+            </NavLink>
             <div className="px-3 py-2.5 border-t border-[#e0ddd6] mt-1 pt-3">
               <SignOutButton />
             </div>

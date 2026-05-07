@@ -13,12 +13,15 @@
 
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { loginAction } from "@/app/actions/auth";
-import Link from "next/link";
+import { NavLink } from "@/components/NavLink";
+import { useNavigation } from "@/components/NavigationProgress";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(loginAction, null);
+  const { setNavigating } = useNavigation();
+  useEffect(() => { if (!pending) setNavigating(false); }, [pending]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f5f4f0] px-4">
@@ -39,7 +42,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form action={formAction} className="space-y-5">
+          <form action={formAction} onSubmit={() => setNavigating(true)} className="space-y-5">
 
             <div>
               <label className="block text-sm font-medium text-[#1a1a1a] mb-1.5">
@@ -78,21 +81,21 @@ export default function LoginPage() {
                          hover:bg-[#2d9b6f] transition-colors
                          disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {pending ? "Signing in..." : "Sign in"}
+              {pending ? "Signing in…" : "Sign in"}
             </button>
           </form>
 
           <p className="text-center mt-4">
-            <Link href="/forgot-password" className="text-sm text-[#2d9b6f] hover:underline">
+            <NavLink href="/forgot-password" className="text-sm text-[#2d9b6f] hover:underline">
               Forgot your password?
-            </Link>
+            </NavLink>
           </p>
 
           <p className="text-center text-sm text-[#6b6b6b] mt-4">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-[#2d9b6f] font-medium hover:underline">
+            <NavLink href="/signup" className="text-[#2d9b6f] font-medium hover:underline">
               Create one free
-            </Link>
+            </NavLink>
           </p>
         </div>
       </div>

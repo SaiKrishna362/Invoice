@@ -18,7 +18,7 @@ import { db } from "@/lib/db";
 import { redirect, notFound } from "next/navigation";
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils";
 import { InvoiceActions } from "./InvoiceActions";
-import Link from "next/link";
+import { NavLink } from "@/components/NavLink";
 
 export default async function InvoiceDetailPage({
   params,
@@ -44,7 +44,7 @@ export default async function InvoiceDetailPage({
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-[#6b6b6b] mb-6">
-        <Link href="/invoices" className="hover:text-[#1a1a1a] transition-colors">Invoices</Link>
+        <NavLink href="/invoices" className="hover:text-[#1a1a1a] transition-colors">Invoices</NavLink>
         <span>/</span>
         <span className="text-[#1a1a1a] font-medium">{invoice.invoiceNo}</span>
       </div>

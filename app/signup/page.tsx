@@ -21,14 +21,15 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { OtpInput, EMPTY_OTP } from "@/components/OtpInput";
 import {
   sendSignupOtpAction,
   createAccountWithOtpAction,
 } from "@/app/actions/auth";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { NavLink } from "@/components/NavLink";
+import { useNavigation } from "@/components/NavigationProgress";
 
 type Step = "form" | "otp" | "done";
 
@@ -44,6 +45,8 @@ export default function SignupPage() {
   const [phoneOtp,  setPhoneOtp]  = useState<string[]>(EMPTY_OTP());
   const [error,     setError]     = useState("");
   const [isPending, start]        = useTransition();
+  const { setNavigating } = useNavigation();
+  useEffect(() => { if (!isPending) setNavigating(false); }, [isPending]);
 
   const hasPhone = phone.trim().length > 0;
 
@@ -55,6 +58,7 @@ export default function SignupPage() {
       setError("Password must be at least 8 characters.");
       return;
     }
+    setNavigating(true);
     start(async () => {
       const res = await sendSignupOtpAction(email, hasPhone ? phone.trim() : undefined);
       if (res.error) { setError(res.error); return; }
@@ -72,6 +76,7 @@ export default function SignupPage() {
     const phoneCode = phoneOtp.join("");
     if (emailCode.length < 6) { setError("Please enter the full email verification code."); return; }
     if (hasPhone && phoneCode.length < 6) { setError("Please enter the full phone verification code."); return; }
+    setNavigating(true);
     start(async () => {
       const res = await createAccountWithOtpAction(
         name, email, password, emailCode,
@@ -87,6 +92,7 @@ export default function SignupPage() {
     setError("");
     setEmailOtp(EMPTY_OTP());
     setPhoneOtp(EMPTY_OTP());
+    setNavigating(true);
     start(async () => {
       const res = await sendSignupOtpAction(email, hasPhone ? phone.trim() : undefined);
       if (res.error) setError(res.error);
@@ -207,9 +213,9 @@ export default function SignupPage() {
 
               <p className="text-center text-sm text-[#6b6b6b] mt-6">
                 Already have an account?{" "}
-                <Link href="/login" className="text-[#2d9b6f] font-medium hover:underline">
+                <NavLink href="/login" className="text-[#2d9b6f] font-medium hover:underline">
                   Sign in
-                </Link>
+                </NavLink>
               </p>
             </>
           )}

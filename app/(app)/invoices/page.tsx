@@ -17,8 +17,8 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils";
-import Link from "next/link";
 import { InvoiceListActions } from "./InvoiceListActions";
+import { InvoiceListHeader, InvoiceStatusTabs, InvoiceEmptyCTA } from "./InvoiceListControls";
 
 const STATUSES = ["ALL", "DRAFT", "SENT", "PAID", "OVERDUE"] as const;
 
@@ -55,42 +55,11 @@ export default async function InvoicesPage({
             {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link
-            href="/invoices/import"
-            className="border border-[#e0ddd6] text-[#6b6b6b] text-sm font-medium px-4 py-2.5 rounded-lg
-                       hover:bg-[#f5f4f0] transition-colors whitespace-nowrap"
-          >
-            Import
-          </Link>
-          <Link
-            href="/invoices/new"
-            className="bg-[#1a6b4a] text-white text-sm font-medium px-4 py-2.5 rounded-lg
-                       hover:bg-[#2d9b6f] transition-colors whitespace-nowrap"
-          >
-            + New
-          </Link>
-        </div>
+        <InvoiceListHeader />
       </div>
 
-      {/* Status filter tabs — horizontal scroll on mobile */}
-      <div className="overflow-x-auto mb-5 -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex gap-1 bg-white border border-[#e0ddd6] rounded-xl p-1 w-max">
-          {STATUSES.map((s) => (
-            <Link
-              key={s}
-              href={s === "ALL" ? "/invoices" : `/invoices?status=${s}`}
-              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap
-                ${activeFilter === s
-                  ? "bg-[#1a6b4a] text-white"
-                  : "text-[#6b6b6b] hover:text-[#1a1a1a] hover:bg-[#f5f4f0]"
-                }`}
-            >
-              {s === "ALL" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}
-            </Link>
-          ))}
-        </div>
-      </div>
+      {/* Status filter tabs */}
+      <InvoiceStatusTabs activeFilter={activeFilter} />
 
       {/* Invoice list */}
       {invoices.length === 0 ? (
@@ -102,13 +71,7 @@ export default async function InvoicesPage({
               : `No ${activeFilter.toLowerCase()} invoices`}
           </p>
           {activeFilter === "ALL" && (
-            <Link
-              href="/invoices/new"
-              className="inline-block bg-[#1a6b4a] text-white text-sm px-5 py-2.5 rounded-lg
-                         hover:bg-[#2d9b6f] transition-colors"
-            >
-              Create Invoice
-            </Link>
+            <InvoiceEmptyCTA />
           )}
         </div>
       ) : (

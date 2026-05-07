@@ -22,7 +22,7 @@ import { useRouter } from "next/navigation";
 import { createInvoiceAction } from "@/app/actions/invoice";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/UnsavedChangesModal";
-import { Spinner } from "@/components/Spinner";
+import { useNavigation } from "@/components/NavigationProgress";
 
 interface Client {
   id: string;
@@ -59,6 +59,8 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
   const [items, setItems] = useState<LineItem[]>([newItem()]);
   const [gstPercent, setGstPercent] = useState(18);
   const [isDirty, setIsDirty] = useState(false);
+  const { setNavigating } = useNavigation();
+  useEffect(() => { if (!pending) setNavigating(false); }, [pending]);
 
   const { showPrompt, proceedNavigation, cancelNavigation, clearDirty } =
     useUnsavedChanges(isDirty);
@@ -119,7 +121,7 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
       )}
 
       {/* onInput bubbles from every input/select/textarea inside the form */}
-      <form action={formAction} className="space-y-5" onInput={() => setIsDirty(true)}>
+      <form action={formAction} onSubmit={() => setNavigating(true)} className="space-y-5" onInput={() => setIsDirty(true)}>
 
         {/* Client + Due date */}
         <div className="bg-white border border-[#e0ddd6] rounded-2xl p-5 sm:p-6">
@@ -301,10 +303,8 @@ export function NewInvoiceForm({ clients }: { clients: Client[] }) {
             type="submit"
             disabled={pending || clients.length === 0}
             className="flex-1 sm:flex-none bg-[#1a6b4a] text-white px-6 py-2.5 rounded-lg
-                       text-sm font-medium hover:bg-[#2d9b6f] transition-colors disabled:opacity-60
-                       flex items-center justify-center gap-2"
+                       text-sm font-medium hover:bg-[#2d9b6f] transition-colors disabled:opacity-60"
           >
-            {pending && <Spinner />}
             {pending ? "Creating…" : "Create Invoice"}
           </button>
         </div>

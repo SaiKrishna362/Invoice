@@ -14,6 +14,7 @@ import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "./providers";
+import { NavigationProvider } from "@/components/NavigationProgress";
 
 // Load DM Sans font — only Latin characters for faster load
 const dmSans = DM_Sans({
@@ -40,7 +41,9 @@ export default function RootLayout({
           SessionProvider wraps everything so any page or component
           can call useSession() to get the logged-in user's info
         */}
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          <NavigationProvider>{children}</NavigationProvider>
+        </SessionProvider>
       </body>
     </html>
   );

@@ -14,8 +14,13 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils";
-import Link from "next/link";
+import { formatCurrency } from "@/lib/utils";
+import {
+  DashboardNewButton,
+  DashboardViewAllLink,
+  DashboardCreateCTA,
+  DashboardInvoiceRow,
+} from "./DashboardActions";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -54,13 +59,7 @@ export default async function DashboardPage() {
             Here&apos;s your invoice overview
           </p>
         </div>
-        <Link
-          href="/invoices/new"
-          className="bg-[#1a6b4a] text-white text-sm font-medium px-5 py-2.5 rounded-lg
-                     hover:bg-[#2d9b6f] transition-colors"
-        >
-          + New Invoice
-        </Link>
+        <DashboardNewButton />
       </div>
 
       {/* ---- STAT CARDS ---- */}
@@ -88,51 +87,19 @@ export default async function DashboardPage() {
       <div className="bg-white border border-[#e0ddd6] rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e0ddd6]">
           <h2 className="font-medium text-[#1a1a1a] text-sm">Recent Invoices</h2>
-          <Link href="/invoices" className="text-xs text-[#2d9b6f] hover:underline">
-            View all →
-          </Link>
+          <DashboardViewAllLink />
         </div>
 
         {recentInvoices.length === 0 ? (
           <div className="text-center py-16 px-6">
             <p className="text-[#6b6b6b] text-sm mb-1">No invoices yet</p>
             <p className="text-[#aaa] text-xs mb-5">Create your first invoice to get started</p>
-            <Link
-              href="/invoices/new"
-              className="inline-block bg-[#1a6b4a] text-white text-sm px-4 py-2 rounded-lg
-                         hover:bg-[#2d9b6f] transition-colors"
-            >
-              Create Invoice
-            </Link>
+            <DashboardCreateCTA />
           </div>
         ) : (
           <div>
             {recentInvoices.map((invoice) => (
-              <div
-                key={invoice.id}
-                className="flex items-center gap-4 px-6 py-4 border-b border-[#e0ddd6] last:border-0
-                           hover:bg-[#f9f8f6] transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#1a1a1a]">{invoice.invoiceNo}</p>
-                  <p className="text-xs text-[#6b6b6b] truncate">{invoice.client.name}</p>
-                </div>
-                <p className="text-xs text-[#6b6b6b] hidden sm:block">
-                  Due {formatDate(invoice.dueDate)}
-                </p>
-                <p className="text-sm font-medium text-[#1a1a1a]">
-                  {formatCurrency(invoice.total)}
-                </p>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(invoice.status)}`}>
-                  {invoice.status}
-                </span>
-                <Link
-                  href={`/invoices/${invoice.id}`}
-                  className="text-xs text-[#2d9b6f] hover:underline shrink-0"
-                >
-                  View →
-                </Link>
-              </div>
+              <DashboardInvoiceRow key={invoice.id} invoice={invoice} />
             ))}
           </div>
         )}

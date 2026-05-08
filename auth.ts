@@ -14,6 +14,13 @@ import Credentials from "next-auth/providers/credentials";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
+// Fail fast at module load if the secret is missing — prevents silent auth breakage
+if (!process.env.NEXTAUTH_SECRET) {
+  throw new Error(
+    "NEXTAUTH_SECRET is not set. Add it to your .env.local file before starting the server."
+  );
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
@@ -25,15 +32,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       authorize: async (credentials) => {
         if (!credentials?.email || !credentials?.password) return null;
 
+        const password = credentials.password as string;
+        // Guard against bcrypt DoS: bcrypt silently truncates at 72 bytes on some
+        // implementations; excessively long strings burn CPU. Reject early.
+        if (password.length > 128) return null;
+
         const email = (credentials.email as string).toLowerCase().trim();
         const user  = await db.user.findUnique({ where: { email } });
 
         if (!user) return null;
 
-        const match = await bcrypt.compare(
-          credentials.password as string,
-          user.password
-        );
+        const match = await bcrypt.compare(password, user.password);
 
         if (!match) return null;
 

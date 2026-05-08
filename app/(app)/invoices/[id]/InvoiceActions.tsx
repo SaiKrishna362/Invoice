@@ -52,7 +52,8 @@ export function InvoiceActions({
   const { setNavigating } = useNavigation();
   useEffect(() => { if (!pending) setNavigating(false); }, [pending]);
 
-  function run(action: string, fn: () => Promise<void> | void) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function run(action: string, fn: () => Promise<any> | void) {
     setActiveAction(action);
     setNavigating(true);
     startTransition(async () => {

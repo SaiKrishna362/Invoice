@@ -15,6 +15,8 @@
 // All actions verify the session before touching any data.
 // Email and phone changes require OTP verification to prevent takeovers.
 // Account deletion requires both email AND phone OTP when a phone is set.
+// OTPs are stored as SHA-256 hashes — never as plaintext.
+// All DB calls are wrapped in try/catch to handle transient failures gracefully.
 // ============================================================
 
 "use server";
@@ -24,7 +26,13 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import crypto from "node:crypto";
 import { Resend } from "resend";
-import { verifyEmailOtp, verifyPhoneOtp, isValidOtpFormat, isValidEmail } from "@/lib/otp";
+import {
+  verifyEmailOtp,
+  verifyPhoneOtp,
+  isValidOtpFormat,
+  isValidEmail,
+  hashOtp,
+} from "@/lib/otp";
 
 // Input length limits — mirror the DB column constraints
 const MAX_NAME    = 100;
@@ -46,13 +54,6 @@ function escapeHtml(s: string) {
 /**
  * Sends a branded OTP email using Resend.
  * Returns null on success, or the error message string on failure.
- *
- * @param to           Recipient email address
- * @param otp          The 6-digit code to display in the email
- * @param subject      Email subject line
- * @param heading      Bold heading text shown in the green (or red) header block
- * @param body         HTML body content above the OTP box
- * @param headingColor Hex colour for the header background (green for normal, red for danger zone)
  */
 async function sendEmailOtp(
   to: string,
@@ -62,12 +63,13 @@ async function sendEmailOtp(
   body: string,
   headingColor = "#1a6b4a"
 ): Promise<string | null> {
-  const resend = new Resend(process.env.RESEND_API_KEY);
-  const { error } = await resend.emails.send({
-    from:    `Tulluri <${process.env.RESEND_FROM_EMAIL}>`,
-    to,
-    subject,
-    html: `<!DOCTYPE html>
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const { error } = await resend.emails.send({
+      from:    `Tulluri <${process.env.RESEND_FROM_EMAIL}>`,
+      to,
+      subject,
+      html: `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>${escapeHtml(heading)}</title></head>
 <body style="margin:0;padding:0;background:#f5f4f0;font-family:Arial,Helvetica,sans-serif">
@@ -94,8 +96,11 @@ async function sendEmailOtp(
   </table>
 </body>
 </html>`,
-  });
-  return error ? (error as { message?: string }).message ?? "Failed to send email." : null;
+    });
+    return error ? (error as { message?: string }).message ?? "Failed to send email." : null;
+  } catch {
+    return "Failed to send email. Please try again.";
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -120,17 +125,21 @@ export async function updateProfileAction(
 
   if (!name)                   return { error: "Name is required.", success: false };
   if (name.length > MAX_NAME)  return { error: "Name is too long (max 100 characters).", success: false };
-  if (gstin && gstin.length > MAX_GSTIN)   return { error: "GSTIN is too long.", success: false };
+  if (gstin && gstin.length > MAX_GSTIN)       return { error: "GSTIN is too long.", success: false };
   if (address && address.length > MAX_ADDRESS) return { error: "Address is too long (max 500 characters).", success: false };
 
-  await db.user.update({
-    where: { id: session.user.id },
-    data: {
-      name,
-      gstin:   gstin   || null,
-      address: address || null,
-    },
-  });
+  try {
+    await db.user.update({
+      where: { id: session.user.id },
+      data: {
+        name,
+        gstin:   gstin   || null,
+        address: address || null,
+      },
+    });
+  } catch {
+    return { error: "Failed to save profile. Please try again.", success: false };
+  }
 
   revalidatePath("/profile");
   return { error: "", success: true };
@@ -143,10 +152,7 @@ export async function updateProfileAction(
 /**
  * Step 1 of the email-change flow.
  * Validates the new address, checks it isn't already taken, then emails
- * a 6-digit OTP to the NEW address (not the current one) so the user
- * proves they control the destination before we switch.
- *
- * @param newEmail The email address the user wants to switch to
+ * a 6-digit OTP to the NEW address stored as a SHA-256 hash.
  */
 export async function sendEmailChangeOtpAction(
   newEmail: string
@@ -159,36 +165,47 @@ export async function sendEmailChangeOtpAction(
   if (normalizedEmail.length > MAX_EMAIL)  return { error: "Invalid email.", success: false };
   if (!isValidEmail(normalizedEmail))      return { error: "Invalid email format.", success: false };
 
-  const current = await db.user.findUnique({ where: { id: session.user.id } });
+  let current;
+  try {
+    current = await db.user.findUnique({ where: { id: session.user.id } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
   if (!current) return { error: "Unauthorized", success: false };
 
   if (current.email === normalizedEmail)
     return { error: "This is already your email address.", success: false };
 
-  const taken = await db.user.findUnique({ where: { email: normalizedEmail } });
+  let taken;
+  try {
+    taken = await db.user.findUnique({ where: { email: normalizedEmail } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
   if (taken) return { error: "This email is already in use by another account.", success: false };
-
-  await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
 
   const otp       = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-  await db.passwordResetToken.create({ data: { email: normalizedEmail, token: otp, expiresAt } });
 
   try {
-    const err = await sendEmailOtp(
-      normalizedEmail,
-      otp,
-      `${otp} is your Tulluri email verification code`,
-      "Verify your new email",
-      `<p style="margin:0 0 4px;color:#1a1a1a;font-size:15px">Hi ${escapeHtml(current.name)},</p>
-       <p style="margin:0;color:#6b6b6b;font-size:14px;line-height:1.6">
-         Enter this code to confirm your new email address. Expires in <strong>10 minutes</strong>.
-       </p>`
-    );
-    if (err) return { error: err, success: false };
+    await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
+    // Store SHA-256 hash — never the raw code
+    await db.passwordResetToken.create({ data: { email: normalizedEmail, token: hashOtp(otp), expiresAt } });
   } catch {
-    return { error: "Failed to send email. Please try again.", success: false };
+    return { error: "Something went wrong. Please try again.", success: false };
   }
+
+  const err = await sendEmailOtp(
+    normalizedEmail,
+    otp,
+    `${otp} is your Tulluri email verification code`,
+    "Verify your new email",
+    `<p style="margin:0 0 4px;color:#1a1a1a;font-size:15px">Hi ${escapeHtml(current.name)},</p>
+     <p style="margin:0;color:#6b6b6b;font-size:14px;line-height:1.6">
+       Enter this code to confirm your new email address. Expires in <strong>10 minutes</strong>.
+     </p>`
+  );
+  if (err) return { error: err, success: false };
 
   return { error: "", success: true };
 }
@@ -196,11 +213,6 @@ export async function sendEmailChangeOtpAction(
 /**
  * Step 2 of the email-change flow.
  * Verifies the OTP and atomically updates the user's email.
- * We re-check that the address isn't taken here in case another user
- * registered with it between step 1 and step 2.
- *
- * @param newEmail The new email (must match what was used in sendEmailChangeOtpAction)
- * @param otp      The 6-digit code the user received
  */
 export async function updateEmailWithOtpAction(
   newEmail: string,
@@ -213,14 +225,18 @@ export async function updateEmailWithOtpAction(
   if (!isValidEmail(normalizedEmail))  return { error: "Invalid email format.", success: false };
   if (!isValidOtpFormat(otp))          return { error: "Invalid code format.", success: false };
 
-  const taken = await db.user.findUnique({ where: { email: normalizedEmail } });
-  if (taken && taken.id !== session.user.id)
-    return { error: "This email is already in use.", success: false };
+  try {
+    const taken = await db.user.findUnique({ where: { email: normalizedEmail } });
+    if (taken && taken.id !== session.user.id)
+      return { error: "This email is already in use.", success: false };
 
-  const err = await verifyEmailOtp(normalizedEmail, otp, true);
-  if (err) return { error: err, success: false };
+    const err = await verifyEmailOtp(normalizedEmail, otp, true);
+    if (err) return { error: err, success: false };
 
-  await db.user.update({ where: { id: session.user.id }, data: { email: normalizedEmail } });
+    await db.user.update({ where: { id: session.user.id }, data: { email: normalizedEmail } });
+  } catch {
+    return { error: "Failed to update email. Please try again.", success: false };
+  }
 
   revalidatePath("/profile");
   return { error: "", success: true };
@@ -232,12 +248,7 @@ export async function updateEmailWithOtpAction(
 
 /**
  * Step 1 of the phone-change flow.
- * Validates the number in E.164 format, sends a 6-digit SMS OTP to the
- * NEW number, and stores the code in the PhoneOtp table.
- *
- * sms.ts is imported dynamically so Twilio is only loaded when needed.
- *
- * @param newPhone Target phone number in E.164 format (e.g. +919876543210)
+ * Validates the number in E.164 format, sends a 6-digit SMS OTP stored as a hash.
  */
 export async function sendPhoneChangeOtpAction(
   newPhone: string
@@ -253,21 +264,31 @@ export async function sendPhoneChangeOtpAction(
   if (!isValidPhone(normalized))
     return { error: "Phone must be in E.164 format, e.g. +919876543210.", success: false };
 
-  const current = await db.user.findUnique({ where: { id: session.user.id } });
+  let current;
+  try {
+    current = await db.user.findUnique({ where: { id: session.user.id } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
   if (!current) return { error: "Unauthorized", success: false };
 
   if (current.phone === normalized)
     return { error: "This is already your phone number.", success: false };
 
-  await db.phoneOtp.deleteMany({ where: { phone: normalized } });
-
   const otp       = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-  await db.phoneOtp.create({ data: { phone: normalized, token: otp, expiresAt } });
+
+  try {
+    await db.phoneOtp.deleteMany({ where: { phone: normalized } });
+    // Store SHA-256 hash — never the raw code
+    await db.phoneOtp.create({ data: { phone: normalized, token: hashOtp(otp), expiresAt } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
 
   const smsErr = await sendSmsOtp(normalized, otp);
   if (smsErr) {
-    await db.phoneOtp.deleteMany({ where: { phone: normalized } });
+    await db.phoneOtp.deleteMany({ where: { phone: normalized } }).catch(() => {});
     return { error: smsErr, success: false };
   }
 
@@ -277,9 +298,6 @@ export async function sendPhoneChangeOtpAction(
 /**
  * Step 2 of the phone-change flow.
  * Verifies the SMS OTP and saves the normalised phone number to the user record.
- *
- * @param newPhone The phone number (must match what was sent in sendPhoneChangeOtpAction)
- * @param otp      The 6-digit code the user received by SMS
  */
 export async function updatePhoneWithOtpAction(
   newPhone: string,
@@ -294,10 +312,14 @@ export async function updatePhoneWithOtpAction(
   if (!isValidPhone(normalized))  return { error: "Invalid phone number.", success: false };
   if (!isValidOtpFormat(otp))     return { error: "Invalid code format.", success: false };
 
-  const err = await verifyPhoneOtp(normalized, otp);
-  if (err) return { error: err, success: false };
+  try {
+    const err = await verifyPhoneOtp(normalized, otp);
+    if (err) return { error: err, success: false };
 
-  await db.user.update({ where: { id: session.user.id }, data: { phone: normalized } });
+    await db.user.update({ where: { id: session.user.id }, data: { phone: normalized } });
+  } catch {
+    return { error: "Failed to update phone number. Please try again.", success: false };
+  }
 
   revalidatePath("/profile");
   return { error: "", success: true };
@@ -306,13 +328,17 @@ export async function updatePhoneWithOtpAction(
 /**
  * Removes the phone number from the user's account.
  * No OTP required — the user is already authenticated and this is a voluntary removal.
- * If the account has no phone, calling this is a no-op.
  */
 export async function removePhoneAction(): Promise<{ error: string; success: boolean }> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", success: false };
 
-  await db.user.update({ where: { id: session.user.id }, data: { phone: null } });
+  try {
+    await db.user.update({ where: { id: session.user.id }, data: { phone: null } });
+  } catch {
+    return { error: "Failed to remove phone number. Please try again.", success: false };
+  }
+
   revalidatePath("/profile");
   return { error: "", success: true };
 }
@@ -325,9 +351,6 @@ export async function removePhoneAction(): Promise<{ error: string; success: boo
  * Initiates account deletion by sending OTP codes to all contact methods.
  * An email OTP is always sent. If the account has a phone number registered,
  * an SMS OTP is also sent — both must be verified to complete deletion.
- *
- * Returns `hasPhone: true` so the UI knows to show the phone OTP field.
- * If the SMS fails we roll back the email OTP to keep them in sync.
  */
 export async function sendDeleteOtpAction(): Promise<{
   error: string;
@@ -339,44 +362,57 @@ export async function sendDeleteOtpAction(): Promise<{
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", success: false, hasPhone: false };
 
-  const user = await db.user.findUnique({ where: { id: session.user.id } });
+  let user;
+  try {
+    user = await db.user.findUnique({ where: { id: session.user.id } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false, hasPhone: false };
+  }
   if (!user) return { error: "Unauthorized", success: false, hasPhone: false };
 
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const emailOtp  = crypto.randomInt(100000, 1000000).toString();
 
   // ---- Email OTP ----
-  await db.passwordResetToken.deleteMany({ where: { email: user.email } });
-  const emailOtp = crypto.randomInt(100000, 1000000).toString();
-  await db.passwordResetToken.create({ data: { email: user.email, token: emailOtp, expiresAt } });
-
   try {
-    const err = await sendEmailOtp(
-      user.email,
-      emailOtp,
-      `${emailOtp} – Confirm account deletion`,
-      "Account Deletion Request",
-      `<p style="margin:0 0 4px;color:#1a1a1a;font-size:15px">Hi ${escapeHtml(user.name)},</p>
-       <p style="margin:0;color:#6b6b6b;font-size:14px;line-height:1.6">
-         We received a request to permanently delete your Tulluri account and all its data.
-         Enter the code below to confirm. Expires in <strong>10 minutes</strong>.
-         <br><br><strong>This action cannot be undone.</strong>
-       </p>`,
-      "#b91c1c"
-    );
-    if (err) return { error: err, success: false, hasPhone: false };
+    await db.passwordResetToken.deleteMany({ where: { email: user.email } });
+    // Store SHA-256 hash — never the raw code
+    await db.passwordResetToken.create({ data: { email: user.email, token: hashOtp(emailOtp), expiresAt } });
   } catch {
-    return { error: "Failed to send email. Please try again.", success: false, hasPhone: false };
+    return { error: "Something went wrong. Please try again.", success: false, hasPhone: false };
   }
+
+  const emailErr = await sendEmailOtp(
+    user.email,
+    emailOtp,
+    `${emailOtp} – Confirm account deletion`,
+    "Account Deletion Request",
+    `<p style="margin:0 0 4px;color:#1a1a1a;font-size:15px">Hi ${escapeHtml(user.name)},</p>
+     <p style="margin:0;color:#6b6b6b;font-size:14px;line-height:1.6">
+       We received a request to permanently delete your Tulluri account and all its data.
+       Enter the code below to confirm. Expires in <strong>10 minutes</strong>.
+       <br><br><strong>This action cannot be undone.</strong>
+     </p>`,
+    "#b91c1c"
+  );
+  if (emailErr) return { error: emailErr, success: false, hasPhone: false };
 
   // ---- Phone OTP (if user has phone) ----
   if (user.phone) {
-    await db.phoneOtp.deleteMany({ where: { phone: user.phone } });
     const phoneOtp = crypto.randomInt(100000, 1000000).toString();
-    await db.phoneOtp.create({ data: { phone: user.phone, token: phoneOtp, expiresAt } });
+    try {
+      await db.phoneOtp.deleteMany({ where: { phone: user.phone } });
+      // Store SHA-256 hash — never the raw code
+      await db.phoneOtp.create({ data: { phone: user.phone, token: hashOtp(phoneOtp), expiresAt } });
+    } catch {
+      await db.passwordResetToken.deleteMany({ where: { email: user.email } }).catch(() => {});
+      return { error: "Something went wrong. Please try again.", success: false, hasPhone: false };
+    }
 
     const smsErr = await sendSmsOtp(user.phone, phoneOtp);
     if (smsErr) {
-      await db.passwordResetToken.deleteMany({ where: { email: user.email } });
+      await db.passwordResetToken.deleteMany({ where: { email: user.email } }).catch(() => {});
+      await db.phoneOtp.deleteMany({ where: { phone: user.phone } }).catch(() => {});
       return { error: smsErr, success: false, hasPhone: false };
     }
   }
@@ -393,9 +429,6 @@ export async function sendDeleteOtpAction(): Promise<{
  *
  * After this action the session is still alive; call logoutAfterDeleteAction
  * immediately afterwards to invalidate it.
- *
- * @param emailOtp  6-digit code sent to the user's email
- * @param phoneOtp  6-digit code sent to the user's phone (required if phone is registered)
  */
 export async function deleteAccountAction(
   emailOtp: string,
@@ -408,30 +441,39 @@ export async function deleteAccountAction(
   if (phoneOtp && !isValidOtpFormat(phoneOtp))
     return { error: "Invalid phone code format.", success: false };
 
-  const user = await db.user.findUnique({ where: { id: session.user.id } });
+  let user;
+  try {
+    user = await db.user.findUnique({ where: { id: session.user.id } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
   if (!user) return { error: "Unauthorized", success: false };
 
-  // Verify email OTP
-  const emailErr = await verifyEmailOtp(user.email, emailOtp, true);
-  if (emailErr) return { error: emailErr, success: false };
+  try {
+    // Verify email OTP
+    const emailErr = await verifyEmailOtp(user.email, emailOtp, true);
+    if (emailErr) return { error: emailErr, success: false };
 
-  // Verify phone OTP if user has phone registered
-  if (user.phone) {
-    if (!phoneOtp) return { error: "Phone verification code is required.", success: false };
-    const phoneErr = await verifyPhoneOtp(user.phone, phoneOtp);
-    if (phoneErr) return { error: phoneErr, success: false };
+    // Verify phone OTP if user has phone registered
+    if (user.phone) {
+      if (!phoneOtp) return { error: "Phone verification code is required.", success: false };
+      const phoneErr = await verifyPhoneOtp(user.phone, phoneOtp);
+      if (phoneErr) return { error: phoneErr, success: false };
+    }
+
+    // Delete all data in dependency order
+    const invoiceIds = (
+      await db.invoice.findMany({ where: { userId: user.id }, select: { id: true } })
+    ).map(inv => inv.id);
+
+    await db.invoiceItem.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+    await db.invoice.deleteMany({ where: { userId: user.id } });
+    await db.client.deleteMany({ where: { userId: user.id } });
+    await db.passwordResetToken.deleteMany({ where: { email: user.email } });
+    await db.user.delete({ where: { id: user.id } });
+  } catch {
+    return { error: "Failed to delete account. Please try again.", success: false };
   }
-
-  // Delete all data in dependency order
-  const invoiceIds = (
-    await db.invoice.findMany({ where: { userId: user.id }, select: { id: true } })
-  ).map(inv => inv.id);
-
-  await db.invoiceItem.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
-  await db.invoice.deleteMany({ where: { userId: user.id } });
-  await db.client.deleteMany({ where: { userId: user.id } });
-  await db.passwordResetToken.deleteMany({ where: { email: user.email } });
-  await db.user.delete({ where: { id: user.id } });
 
   return { error: "", success: true };
 }

@@ -5,6 +5,8 @@
 // for both email-based and SMS-based flows.
 //
 // Features:
+//   - SHA-256 hashing: OTPs are stored as hashes, never plaintext
+//   - Timing-safe comparison: prevents timing-oracle attacks
 //   - Brute-force protection: locks token after 5 wrong guesses
 //   - Expiry checking: tokens are valid for 10 minutes
 //   - Consume mode: optionally deletes the token after success
@@ -13,7 +15,31 @@
 // Used by: actions/auth.ts, actions/profile.ts
 // ============================================================
 
-import { db } from "@/lib/db";
+import { db }     from "@/lib/db";
+import { createHash, timingSafeEqual } from "node:crypto";
+
+/**
+ * Hashes a 6-digit OTP with SHA-256 before storing in the database.
+ * Always store the hash, never the raw code.
+ */
+export function hashOtp(otp: string): string {
+  return createHash("sha256").update(otp).digest("hex");
+}
+
+/**
+ * Compares a submitted OTP against a stored hash using a constant-time
+ * algorithm so the comparison duration does not leak information.
+ */
+function otpMatch(submitted: string, storedHash: string): boolean {
+  try {
+    const a = Buffer.from(hashOtp(submitted), "hex");
+    const b = Buffer.from(storedHash,         "hex");
+    // timingSafeEqual requires same-length buffers; both are 64 hex chars (SHA-256)
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
 
 // Maximum number of wrong OTP guesses before the token is invalidated
 export const MAX_OTP_ATTEMPTS = 5;
@@ -55,7 +81,7 @@ export async function verifyEmailOtp(
   }
 
   // Wrong code — increment the attempt counter
-  if (record.token !== submittedOtp) {
+  if (!otpMatch(submittedOtp, record.token)) {
     const newAttempts = record.attempts + 1;
 
     // Reached the limit — nuke the token so the user must request a fresh one
@@ -104,7 +130,7 @@ export async function verifyPhoneOtp(
   }
 
   // Wrong code — increment attempt counter
-  if (record.token !== submittedOtp) {
+  if (!otpMatch(submittedOtp, record.token)) {
     const newAttempts = record.attempts + 1;
 
     if (newAttempts >= MAX_OTP_ATTEMPTS) {

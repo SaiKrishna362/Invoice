@@ -29,7 +29,12 @@ declare global {
 // Creates a fresh Prisma client connected to the Postgres database
 // specified by the DATABASE_URL environment variable
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "DATABASE_URL is not set. Add it to your .env.local file before starting the server."
+    );
+  }
+  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
   return new PrismaClient({ adapter });
 }
 

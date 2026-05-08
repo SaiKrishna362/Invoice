@@ -170,54 +170,59 @@ export async function createImportedInvoicesAction(
   // ── Write each invoice to the database ───────────────────────────────
   const created: { invoiceId: string; invoiceNo: string }[] = [];
 
-  for (const inv of invoices) {
-    // Find an existing client with this email, or create a new one
-    let client = await db.client.findFirst({
-      where: { userId, email: inv.clientEmail.toLowerCase() },
-    });
+  try {
+    for (const inv of invoices) {
+      // Find an existing client with this email, or create a new one
+      let client = await db.client.findFirst({
+        where: { userId, email: inv.clientEmail.toLowerCase() },
+      });
 
-    if (!client) {
-      client = await db.client.create({
+      if (!client) {
+        client = await db.client.create({
+          data: {
+            userId,
+            name:  inv.clientName || inv.clientEmail,
+            email: inv.clientEmail.toLowerCase(),
+          },
+        });
+      }
+
+      // Calculate totals — rounded to 2 decimal places to avoid float drift
+      const gstPercent = inv.gstPercent ?? 18;
+      const items = inv.items.map(it => ({
+        description: it.description.trim(),
+        quantity:    it.quantity,
+        rate:        it.rate,
+        amount:      Math.round(it.quantity * it.rate * 100) / 100,
+      }));
+
+      const subtotal  = Math.round(items.reduce((s, it) => s + it.amount, 0) * 100) / 100;
+      const gstAmount = Math.round(subtotal * (gstPercent / 100) * 100) / 100;
+      const total     = Math.round((subtotal + gstAmount) * 100) / 100;
+
+      // Each invoice gets a unique, collision-free ID — no DB query, no race condition
+      const invoiceNo = generateInvoiceNo();
+
+      const invoice = await db.invoice.create({
         data: {
+          invoiceNo,
           userId,
-          name:  inv.clientName || inv.clientEmail,
-          email: inv.clientEmail.toLowerCase(),
+          clientId:  client.id,
+          dueDate:   new Date(inv.dueDate),
+          gstPercent,
+          subtotal,
+          gstAmount,
+          total,
+          notes:     inv.notes || null,
+          items:     { create: items },
         },
       });
+
+      created.push({ invoiceId: invoice.id, invoiceNo });
     }
-
-    // Calculate totals — rounded to 2 decimal places to avoid float drift
-    const gstPercent = inv.gstPercent ?? 18;
-    const items = inv.items.map(it => ({
-      description: it.description.trim(),
-      quantity:    it.quantity,
-      rate:        it.rate,
-      amount:      Math.round(it.quantity * it.rate * 100) / 100,
-    }));
-
-    const subtotal  = Math.round(items.reduce((s, it) => s + it.amount, 0) * 100) / 100;
-    const gstAmount = Math.round(subtotal * (gstPercent / 100) * 100) / 100;
-    const total     = Math.round((subtotal + gstAmount) * 100) / 100;
-
-    // Each invoice gets a unique, collision-free ID — no DB query, no race condition
-    const invoiceNo = generateInvoiceNo();
-
-    const invoice = await db.invoice.create({
-      data: {
-        invoiceNo,
-        userId,
-        clientId:  client.id,
-        dueDate:   new Date(inv.dueDate),
-        gstPercent,
-        subtotal,
-        gstAmount,
-        total,
-        notes:     inv.notes || null,
-        items:     { create: items },
-      },
-    });
-
-    created.push({ invoiceId: invoice.id, invoiceNo });
+  } catch (err) {
+    console.error("[import] DB write error:", err);
+    return { error: "Failed to save invoices. Please try again.", created: [] };
   }
 
   // Refresh the invoice list and dashboard so new records show up immediately

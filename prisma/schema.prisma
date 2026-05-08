@@ -45,9 +45,12 @@ model Client {
 
   // Links client to the user who created them
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   invoices  Invoice[]
+
+  @@index([userId])
+  @@unique([userId, email])              // A user cannot have two clients with the same email
 }
 
 // ============================================
@@ -67,12 +70,16 @@ model Invoice {
   updatedAt  DateTime      @updatedAt
 
   userId     String
-  user       User          @relation(fields: [userId], references: [id])
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   clientId   String
   client     Client        @relation(fields: [clientId], references: [id])
 
   items      InvoiceItem[]
+
+  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])  // Fast lookup for dashboard / list sorted by date
+  @@index([status])                         // Fast filter by invoice status
 }
 
 // ============================================
@@ -87,35 +94,37 @@ model InvoiceItem {
   amount      Float   // quantity × rate (pre-calculated)
 
   invoiceId   String
-  invoice     Invoice @relation(fields: [invoiceId], references: [id])
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
 }
 
 // ============================================
 // PASSWORD RESET TOKEN — one-time reset links
+// OTP is stored as a SHA-256 hash (never plaintext)
 // ============================================
 model PasswordResetToken {
   id        String   @id @default(cuid())
-  email     String
-  token     String
-  attempts  Int      @default(0)   // locked after 5 wrong guesses
+  email     String   @unique              // Only one active token per email at a time
+  token     String                        // SHA-256 hash of the 6-digit OTP
+  attempts  Int      @default(0)          // Locked after 5 wrong guesses
   expiresAt DateTime
 
   @@index([email])
-  @@unique([email, token])         // same OTP may exist for different emails
 }
 
 // ============================================
 // PHONE OTP — SMS verification codes
+// OTP is stored as a SHA-256 hash (never plaintext)
 // ============================================
 model PhoneOtp {
   id        String   @id @default(cuid())
-  phone     String
-  token     String
-  attempts  Int      @default(0)   // locked after 5 wrong guesses
+  phone     String   @unique              // Only one active token per number at a time
+  token     String                        // SHA-256 hash of the 6-digit OTP
+  attempts  Int      @default(0)          // Locked after 5 wrong guesses
   expiresAt DateTime
 
   @@index([phone])
-  @@unique([phone, token])         // same OTP may exist for different numbers
 }
 
 // ============================================

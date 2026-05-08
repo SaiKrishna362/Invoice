@@ -23,7 +23,7 @@ import { db }              from "@/lib/db";
 import bcrypt              from "bcryptjs";
 import crypto              from "node:crypto";
 import { Resend }          from "resend";
-import { verifyEmailOtp, verifyPhoneOtp, isValidOtpFormat, isValidEmail } from "@/lib/otp";
+import { verifyEmailOtp, verifyPhoneOtp, isValidOtpFormat, isValidEmail, hashOtp } from "@/lib/otp";
 
 // Server-side input length limits — mirrors the DB column constraints
 const MAX_NAME     = 100;
@@ -57,10 +57,17 @@ export async function loginAction(
   _prevState: { error: string } | null,
   formData: FormData
 ): Promise<{ error: string }> {
+  const email    = (formData.get("email")    as string)?.toLowerCase().trim();
+  const password = (formData.get("password") as string) ?? "";
+
+  // Validate before hitting bcrypt — prevents bcrypt DoS on long passwords
+  if (!email || !password) return { error: "Email and password are required." };
+  if (password.length > MAX_PASSWORD) return { error: "Invalid email or password. Please try again." };
+
   try {
     await signIn("credentials", {
-      email:      formData.get("email"),
-      password:   formData.get("password"),
+      email,
+      password,
       redirectTo: "/dashboard",
     });
   } catch (err) {
@@ -100,16 +107,28 @@ export async function sendOtpAction(
   if (normalizedEmail.length > MAX_EMAIL) return { error: "Invalid email.",          success: false };
   if (!isValidEmail(normalizedEmail))     return { error: "Invalid email format.",   success: false };
 
-  const user = await db.user.findUnique({ where: { email: normalizedEmail } });
+  let user;
+  try {
+    user = await db.user.findUnique({ where: { email: normalizedEmail } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
 
-  if (!user) return { error: "No account found with this email address.", success: false };
-
-  // Delete any existing OTP for this email before creating a fresh one
-  await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
+  // Return a generic response whether or not the account exists — prevents
+  // email enumeration by timing or message differences.
+  if (!user) return { error: "", success: true };
 
   const otp       = crypto.randomInt(100000, 1000000).toString(); // Cryptographically secure 6-digit code
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);        // Valid for 10 minutes
-  await db.passwordResetToken.create({ data: { email: normalizedEmail, token: otp, expiresAt } });
+
+  try {
+    // Delete any existing OTP for this email before creating a fresh one
+    await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
+    // Store SHA-256 hash of the OTP, never the raw code
+    await db.passwordResetToken.create({ data: { email: normalizedEmail, token: hashOtp(otp), expiresAt } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
 
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
@@ -175,10 +194,14 @@ export async function verifyOtpAction(
   const normalizedEmail = email.toLowerCase().trim();
   if (!isValidOtpFormat(otp)) return { error: "Invalid code format.", success: false };
 
-  // consume=false: keep the token alive for the password-reset step
-  const err = await verifyEmailOtp(normalizedEmail, otp, false);
-  if (err) return { error: err, success: false };
-  return { error: "", success: true };
+  try {
+    // consume=false: keep the token alive for the password-reset step
+    const err = await verifyEmailOtp(normalizedEmail, otp, false);
+    if (err) return { error: err, success: false };
+    return { error: "", success: true };
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -205,7 +228,11 @@ export async function resetPasswordWithOtpAction(
   if (err) return { error: err, success: false };
 
   const hashed = await bcrypt.hash(newPassword, 10);
-  await db.user.update({ where: { email: normalizedEmail }, data: { password: hashed } });
+  try {
+    await db.user.update({ where: { email: normalizedEmail }, data: { password: hashed } });
+  } catch {
+    return { error: "Failed to update password. Please try again.", success: false };
+  }
 
   return { error: "", success: true };
 }
@@ -234,7 +261,12 @@ export async function sendSignupOtpAction(
   if (!isValidEmail(normalizedEmail))     return { error: "Invalid email format.", success: false };
 
   // Reject if an account with this email already exists
-  const existing = await db.user.findUnique({ where: { email: normalizedEmail } });
+  let existing;
+  try {
+    existing = await db.user.findUnique({ where: { email: normalizedEmail } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
   if (existing) return { error: "An account with this email already exists.", success: false };
 
   // Validate phone if provided
@@ -247,11 +279,16 @@ export async function sendSignupOtpAction(
   }
 
   // ── Email OTP ────────────────────────────────────────────────────────
-  // Clear any previous signup OTP for this address first
-  await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
   const emailOtp  = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-  await db.passwordResetToken.create({ data: { email: normalizedEmail, token: emailOtp, expiresAt } });
+  try {
+    // Clear any previous signup OTP for this address first
+    await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
+    // Store SHA-256 hash — never the raw code
+    await db.passwordResetToken.create({ data: { email: normalizedEmail, token: hashOtp(emailOtp), expiresAt } });
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
+  }
 
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
@@ -299,14 +336,22 @@ export async function sendSignupOtpAction(
 
   // ── Phone OTP (only when a phone number was provided) ─────────────────
   if (normalizedPhone) {
-    await db.phoneOtp.deleteMany({ where: { phone: normalizedPhone } });
     const phoneOtp = crypto.randomInt(100000, 1000000).toString();
-    await db.phoneOtp.create({ data: { phone: normalizedPhone, token: phoneOtp, expiresAt } });
+    try {
+      await db.phoneOtp.deleteMany({ where: { phone: normalizedPhone } });
+      // Store SHA-256 hash — never the raw code
+      await db.phoneOtp.create({ data: { phone: normalizedPhone, token: hashOtp(phoneOtp), expiresAt } });
+    } catch {
+      // Roll back email OTP so user can retry cleanly
+      await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } }).catch(() => {});
+      return { error: "Something went wrong. Please try again.", success: false };
+    }
 
     const smsErr = await sendSmsOtp(normalizedPhone, phoneOtp);
     if (smsErr) {
-      // SMS failed — roll back the email OTP so the user can retry cleanly
-      await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
+      // SMS failed — roll back both OTPs so the user can retry cleanly
+      await db.passwordResetToken.deleteMany({ where: { email: normalizedEmail } }).catch(() => {});
+      await db.phoneOtp.deleteMany({ where: { phone: normalizedPhone } }).catch(() => {});
       return { error: smsErr, success: false };
     }
   }
@@ -353,30 +398,39 @@ export async function createAccountWithOtpAction(
       return { error: "Invalid phone code format.", success: false };
   }
 
-  // Race-condition guard: check again that the email is still not taken
-  const existing = await db.user.findUnique({ where: { email: normalizedEmail } });
-  if (existing) return { error: "An account with this email already exists.", success: false };
+  try {
+    // Race-condition guard: check again that the email is still not taken
+    const existing = await db.user.findUnique({ where: { email: normalizedEmail } });
+    if (existing) return { error: "An account with this email already exists.", success: false };
 
-  // Verify and consume the email OTP
-  const emailErr = await verifyEmailOtp(normalizedEmail, emailOtp, true);
-  if (emailErr) return { error: emailErr, success: false };
+    // Verify and consume the email OTP
+    const emailErr = await verifyEmailOtp(normalizedEmail, emailOtp, true);
+    if (emailErr) return { error: emailErr, success: false };
 
-  // Verify and consume the phone OTP (if phone was provided during signup)
-  if (normalizedPhone && phoneOtp) {
-    const phoneErr = await verifyPhoneOtp(normalizedPhone, phoneOtp);
-    if (phoneErr) return { error: phoneErr, success: false };
+    // Verify and consume the phone OTP (if phone was provided during signup)
+    if (normalizedPhone && phoneOtp) {
+      const phoneErr = await verifyPhoneOtp(normalizedPhone, phoneOtp);
+      if (phoneErr) return { error: phoneErr, success: false };
+    }
+  } catch {
+    return { error: "Something went wrong. Please try again.", success: false };
   }
 
   // All checks passed — hash password and create the account
   const hashed = await bcrypt.hash(password, 10);
-  await db.user.create({
-    data: {
-      name:     trimmedName,
-      email:    normalizedEmail,
-      password: hashed,
-      phone:    normalizedPhone ?? null,
-    },
-  });
+  try {
+    await db.user.create({
+      data: {
+        name:     trimmedName,
+        email:    normalizedEmail,
+        password: hashed,
+        phone:    normalizedPhone ?? null,
+      },
+    });
+  } catch {
+    // Unique constraint violation means the email was registered in a concurrent request
+    return { error: "An account with this email already exists.", success: false };
+  }
 
   return { error: "", success: true };
 }

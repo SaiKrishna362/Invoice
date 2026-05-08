@@ -48,13 +48,27 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const pdfBytes = await generateInvoicePDF(invoice);
+  let pdfBytes: Uint8Array;
+  try {
+    pdfBytes = await generateInvoicePDF(invoice);
+  } catch (err) {
+    console.error("[PDF] Generation failed:", err);
+    return NextResponse.json({ error: "Failed to generate PDF." }, { status: 500 });
+  }
+
+  // RFC 5987-safe Content-Disposition:
+  //   filename=  — ASCII fallback for older clients (special chars replaced with _)
+  //   filename*= — UTF-8 encoded value for modern clients (e.g. invoice numbers
+  //                with spaces or non-ASCII characters render correctly)
+  const asciiName    = invoice.invoiceNo.replace(/[^\x20-\x7E]/g, "_");
+  const encodedName  = encodeURIComponent(`${invoice.invoiceNo}.pdf`);
+  const disposition  = `attachment; filename="${asciiName}.pdf"; filename*=UTF-8''${encodedName}`;
 
   return new NextResponse(Buffer.from(pdfBytes), {
     status: 200,
     headers: {
       "Content-Type":        "application/pdf",
-      "Content-Disposition": `attachment; filename="${invoice.invoiceNo}.pdf"`,
+      "Content-Disposition": disposition,
     },
   });
 }

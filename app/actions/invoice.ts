@@ -70,6 +70,14 @@ export async function createInvoiceAction(
   if (!clientId) return { error: "Client is required.",   success: false };
   if (!dueDate)  return { error: "Due date is required.", success: false };
 
+  // Validate that dueDate is a real calendar date
+  const parsedDue = new Date(dueDate);
+  if (isNaN(parsedDue.getTime())) return { error: "Invalid due date.",   success: false };
+
+  // Validate GST percentage is in [0, 100]
+  if (gstPercent < 0 || gstPercent > 100)
+    return { error: "GST percentage must be between 0 and 100.", success: false };
+
   // Verify the client exists and belongs to the current user (IDOR prevention)
   const client = await db.client.findUnique({ where: { id: clientId } });
   if (!client || client.userId !== session.user.id)
@@ -96,20 +104,25 @@ export async function createInvoiceAction(
   const invoiceNo = generateInvoiceNo();
 
   // ── Persist invoice + items ───────────────────────────────────────────
-  const invoice = await db.invoice.create({
-    data: {
-      invoiceNo,
-      clientId,
-      userId:    session.user.id,
-      dueDate:   new Date(dueDate),
-      gstPercent,
-      subtotal,
-      gstAmount,
-      total,
-      notes,
-      items: { create: items }, // Prisma nested write — creates items in one round-trip
-    },
-  });
+  let invoice;
+  try {
+    invoice = await db.invoice.create({
+      data: {
+        invoiceNo,
+        clientId,
+        userId:    session.user.id,
+        dueDate:   parsedDue,
+        gstPercent,
+        subtotal,
+        gstAmount,
+        total,
+        notes,
+        items: { create: items }, // Prisma nested write — creates items in one round-trip
+      },
+    });
+  } catch {
+    return { error: "Failed to create invoice. Please try again.", success: false };
+  }
 
   // Refresh invoice list and dashboard counts
   revalidatePath("/invoices");
@@ -126,6 +139,8 @@ export async function createInvoiceAction(
  * Silently ignores requests for invoices the user doesn't own.
  * Called from InvoiceActions.tsx.
  */
+const VALID_STATUSES = new Set(["DRAFT", "SENT", "PAID", "OVERDUE"]);
+
 export async function updateInvoiceStatusAction(
   id: string,
   status: "DRAFT" | "SENT" | "PAID" | "OVERDUE"
@@ -133,16 +148,23 @@ export async function updateInvoiceStatusAction(
   const session = await auth();
   if (!session?.user?.id) return;
 
-  // Ownership check — reject if invoice belongs to a different user
-  const invoice = await db.invoice.findUnique({ where: { id } });
-  if (!invoice || invoice.userId !== session.user.id) return;
+  // Runtime allowlist — ensures callers cannot pass arbitrary DB values
+  if (!VALID_STATUSES.has(status)) return;
 
-  await db.invoice.update({ where: { id }, data: { status } });
+  try {
+    // Ownership check — reject if invoice belongs to a different user
+    const invoice = await db.invoice.findUnique({ where: { id } });
+    if (!invoice || invoice.userId !== session.user.id) return;
 
-  // Refresh the detail page, list, and dashboard
-  revalidatePath(`/invoices/${id}`);
-  revalidatePath("/invoices");
-  revalidatePath("/dashboard");
+    await db.invoice.update({ where: { id }, data: { status } });
+
+    // Refresh the detail page, list, and dashboard
+    revalidatePath(`/invoices/${id}`);
+    revalidatePath("/invoices");
+    revalidatePath("/dashboard");
+  } catch (err) {
+    console.error("[updateInvoiceStatus]", err);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -154,21 +176,26 @@ export async function updateInvoiceStatusAction(
  * Redirects to /invoices after deletion.
  * Called from InvoiceActions.tsx after the user confirms in the modal.
  */
-export async function deleteInvoiceAction(id: string): Promise<void> {
+export async function deleteInvoiceAction(id: string): Promise<{ error?: string }> {
   const session = await auth();
-  if (!session?.user?.id) return;
+  if (!session?.user?.id) return { error: "Unauthorized" };
 
-  const invoice = await db.invoice.findUnique({ where: { id } });
-  if (!invoice || invoice.userId !== session.user.id) return;
+  try {
+    const invoice = await db.invoice.findUnique({ where: { id } });
+    if (!invoice || invoice.userId !== session.user.id) return { error: "Invoice not found." };
 
-  await db.$transaction([
-    db.invoiceItem.deleteMany({ where: { invoiceId: id } }),
-    db.invoice.delete({ where: { id } }),
-  ]);
+    await db.$transaction([
+      db.invoiceItem.deleteMany({ where: { invoiceId: id } }),
+      db.invoice.delete({ where: { id } }),
+    ]);
+  } catch (err) {
+    console.error("[deleteInvoice]", err);
+    return { error: "Failed to delete invoice. Please try again." };
+  }
 
   revalidatePath("/invoices");
   revalidatePath("/dashboard");
-  redirect("/invoices"); // Navigate back to the invoice list
+  redirect("/invoices"); // redirect() throws internally — must be outside try/catch
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -275,8 +302,11 @@ export async function sendInvoiceAction(
 </body>
 </html>`;
 
+    // Sanitize the display name: strip characters that could break email headers
+    const safeFromName = invoice.user.name.replace(/[\r\n"<>]/g, "").trim() || "Tulluri";
+
     const { error: sendError } = await resend.emails.send({
-      from:     `${invoice.user.name} <${process.env.RESEND_FROM_EMAIL}>`,
+      from:     `${safeFromName} <${process.env.RESEND_FROM_EMAIL}>`,
       replyTo:  invoice.user.email,          // Replies go directly to the freelancer
       to:       invoice.client.email,
       subject:  `Invoice ${invoice.invoiceNo} from ${escapeHtml(invoice.user.name)} – ${totalFormatted}`,
